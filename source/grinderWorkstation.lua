@@ -5,34 +5,65 @@ local pd <const> = playdate
 local gfx <const> = playdate.graphics
 local grinder <const> = PlayerConfig.grinder
 
-local meatX <const> = 125
-local meatStartY <const> = 8
-local meatWidth <const> = 36
-local meatHeight <const> = 80
-local meatTravelDistance <const> = 97
+-- Where the machine sits on screen, and points measured on its art. The
+-- mounting values in resource/GENERATED_ASSETS.md are off by up to 19 px, so
+-- these were measured on the PNGs themselves.
+local bodyX <const> = 130
+local bodyY <const> = 76
+local hopperCenterX <const> = bodyX + 48
+local hopperRimY <const> = bodyY + 12
+local crankMountX <const> = bodyX + 34
+local crankMountY <const> = bodyY + 78
+local outletX <const> = bodyX + 154
+local outletTopY <const> = bodyY + 66
+local outletBottomY <const> = bodyY + 90
+
+-- Where the grip points in the unrotated art, clockwise from straight up.
+-- Subtracting it makes the grip follow the physical crank, which reads 0 when
+-- pointing up.
+local crankGripAngle <const> = 250
+
+-- How far the resting meat sits down into the hopper mouth.
+local meatSeat <const> = 6
+
+local function loadImage(path)
+    local image, loadError = gfx.image.new(path)
+    assert(image, loadError)
+    return image
+end
+
+local bodyImage <const> = loadImage("resource/GrinderBody")
+
+-- Built by tools/build_station_sprites.py, stood on end and shrunk to
+-- feed down into the hopper.
+local meatImage <const> = loadImage("resource/grinder/RawMeat")
+local meatWidth, meatHeight = meatImage:getSize()
+local meatRestY <const> = hopperRimY - meatHeight + meatSeat
+local meatTravelDistance <const> = meatHeight - meatSeat
 local meatDropStartY <const> = -meatHeight - 8
 
-local inletX <const> = 112
-local inletY <const> = 74
-local inletWidth <const> = 62
+local function loadFrames(path)
+    local frameTable, loadError = gfx.imagetable.new(path)
+    assert(frameTable, loadError)
 
-local machineX <const> = 85
-local machineY <const> = 105
-local machineWidth <const> = 205
-local machineHeight <const> = 80
+    local frames = {}
 
-local outletX <const> = machineX + machineWidth - 2
-local outletY <const> = 145
-local outletWidth <const> = 30
-local outletHeight <const> = 24
+    for index = 1, frameTable:getLength() do
+        frames[index] = frameTable:getImage(index)
+    end
 
-local crankPivotX <const> = 275
-local crankPivotY <const> = 122
+    return frames
+end
 
-local crankImage = gfx.image.new(90, 90)
-gfx.pushContext(crankImage)
-    gfx.fillRect(45, 39, 39, 12)
-gfx.popContext()
+-- The crank pre-rendered at every rotation step, centred on its hub. Picking
+-- a frame is a plain blit, where drawRotated would resample the thin dithered
+-- arm into a broken string of dots at most angles.
+local crankFrames <const> = loadFrames("resource/grinder/crank")
+local crankHalf <const> = math.floor(crankFrames[1]:getSize() / 2)
+
+-- Every fully opaque 4x4 cell of the meat, cut by the build script, so each
+-- particle is a real crumb of it rather than a plain square.
+local minceImages <const> = loadFrames("resource/grinder/mince")
 
 GrinderWorkstation = {}
 GrinderWorkstation.usesCrank = true
@@ -89,10 +120,10 @@ function GrinderWorkstation.getDisplayedMeatY()
         local easedProgress = 1 - (1 - animationProgress) ^ 3
 
         return meatDropStartY +
-            (meatStartY - meatDropStartY) * easedProgress
+            (meatRestY - meatDropStartY) * easedProgress
     end
 
-    return meatStartY +
+    return meatRestY +
         GrinderWorkstation.getMeatProgress() * meatTravelDistance
 end
 
@@ -119,11 +150,11 @@ local function spawnOutputParticles(particleCount)
         end
 
         grinder.outputParticles[#grinder.outputParticles + 1] = {
-            x = outletX + outletWidth - 2,
-            y = outletY + math.random(5, outletHeight - 5),
+            x = outletX,
+            y = math.random(outletTopY, outletBottomY),
             velocityX = math.random(14, 25) / 10,
             velocityY = math.random(-12, 5) / 10,
-            size = math.random(3, 6),
+            crumb = math.random(#minceImages),
             life = grinder.particleLifeFrames,
         }
     end
@@ -190,111 +221,34 @@ local function drawMeat()
         return
     end
 
-    local meatY = GrinderWorkstation.getDisplayedMeatY()
-
-    gfx.setColor(gfx.kColorBlack)
-    gfx.fillRoundRect(
-        meatX,
-        math.floor(meatY),
-        meatWidth,
-        meatHeight,
-        5
+    -- Only the part above the rim shows; below it the meat has gone into the
+    -- hopper. A clip rather than letting the body cover it, because the
+    -- funnel narrows and the meat would poke out past its sides.
+    gfx.setClipRect(0, 0, PlayerConfig.screenWidth, hopperRimY)
+    meatImage:draw(
+        hopperCenterX - math.floor(meatWidth / 2),
+        math.floor(GrinderWorkstation.getDisplayedMeatY())
     )
-end
-
-local function drawMachine()
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRoundRect(
-        machineX,
-        machineY,
-        machineWidth,
-        machineHeight,
-        10
-    )
-
-    gfx.setColor(gfx.kColorBlack)
-    gfx.setLineWidth(4)
-    gfx.drawRoundRect(
-        machineX,
-        machineY,
-        machineWidth,
-        machineHeight,
-        8
-    )
-
-    gfx.setLineWidth(3)
-    gfx.drawLine(inletX, inletY, inletX, machineY)
-    gfx.drawLine(
-        inletX + inletWidth,
-        inletY,
-        inletX + inletWidth,
-        machineY
-    )
-    gfx.drawLine(inletX, inletY, inletX + inletWidth, inletY)
-
-    -- The collar is drawn after the meat so it stays in the foreground
-    -- and hides the part of the meat that has entered the machine.
-    local collarY = machineY - 12
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRect(
-        inletX - 3,
-        collarY,
-        inletWidth + 6,
-        14
-    )
-    gfx.setColor(gfx.kColorBlack)
-    gfx.setLineWidth(3)
-    gfx.drawRect(
-        inletX - 3,
-        collarY,
-        inletWidth + 6,
-        14
-    )
-
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRoundRect(
-        outletX,
-        outletY,
-        outletWidth,
-        outletHeight,
-        4
-    )
-    gfx.setColor(gfx.kColorBlack)
-    gfx.setLineWidth(3)
-    gfx.drawRoundRect(
-        outletX,
-        outletY,
-        outletWidth,
-        outletHeight,
-        4
-    )
-
-    gfx.drawText("GRINDER", machineX + 56, machineY + 43)
-    gfx.fillCircleAtPoint(machineX + 18, machineY + 17, 3)
-    gfx.fillCircleAtPoint(
-        machineX + machineWidth - 18,
-        machineY + machineHeight - 17,
-        3
-    )
+    gfx.clearClipRect()
 end
 
 local function drawCrank()
-    crankImage:drawRotated(
-        crankPivotX,
-        crankPivotY,
-        grinder.crankAngle
+    local frameCount = #crankFrames
+    local rotation = (grinder.crankAngle - crankGripAngle) % 360
+    local frame =
+        math.floor(rotation / 360 * frameCount + 0.5) % frameCount + 1
+
+    crankFrames[frame]:draw(
+        crankMountX - crankHalf,
+        crankMountY - crankHalf
     )
 end
 
 local function drawOutputParticles()
-    gfx.setColor(gfx.kColorBlack)
-
     for _, particle in ipairs(grinder.outputParticles) do
-        gfx.fillRect(
+        minceImages[particle.crumb]:draw(
             math.floor(particle.x),
-            math.floor(particle.y),
-            particle.size,
-            particle.size
+            math.floor(particle.y)
         )
     end
 end
@@ -302,14 +256,9 @@ end
 function GrinderWorkstation.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.drawText("1  GRINDER", 12, 10)
-    gfx.drawText("MEAT", 24, 75)
-    gfx.setLineWidth(2)
-    gfx.drawLine(64, 84, inletX - 5, 84)
-    gfx.drawLine(inletX - 11, 80, inletX - 5, 84)
-    gfx.drawLine(inletX - 11, 88, inletX - 5, 84)
 
     drawMeat()
-    drawMachine()
+    bodyImage:draw(bodyX, bodyY)
     drawCrank()
     drawOutputParticles()
 
