@@ -35,6 +35,7 @@ gfx.pushContext(crankImage)
 gfx.popContext()
 
 GrinderWorkstation = {}
+GrinderWorkstation.usesCrank = true
 
 local function chooseMeatYield()
     local choices = grinder.possibleYields

@@ -1,4 +1,5 @@
 import "CoreLibs/graphics"
+import "CoreLibs/ui"
 import "playerConfig"
 import "workstationManager"
 import "grinderWorkstation"
@@ -8,6 +9,8 @@ import "Juice"
 
 local pd <const> = playdate
 local gfx <const> = playdate.graphics
+local crankIndicator <const> = pd.ui.crankIndicator
+local wasShowingCrankIndicator = false
 
 pd.display.setRefreshRate(PlayerConfig.refreshRate)
 
@@ -45,4 +48,17 @@ function playdate.update()
     end
 
     Juice.draw()
+
+    local shouldShowCrankIndicator =
+        WorkstationManager.shouldShowCrankIndicator(
+            pd.isCrankDocked()
+        )
+
+    if shouldShowCrankIndicator then
+        crankIndicator:draw()
+    elseif wasShowingCrankIndicator then
+        crankIndicator:resetAnimation()
+    end
+
+    wasShowingCrankIndicator = shouldShowCrankIndicator
 end

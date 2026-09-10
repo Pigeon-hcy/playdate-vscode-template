@@ -1,6 +1,7 @@
 import "CoreLibs/graphics"
 import "CoreLibs/crank"
 import "playerConfig"
+import "juicy"
 
 local pd <const> = playdate
 local gfx <const> = playdate.graphics
@@ -13,6 +14,10 @@ local stackWidth <const> = 128
 local layerHeight <const> = 96
 local layerOffset <const> = 19
 local baseLayerY <const> = 108
+local compactStackTop <const> = 8
+local stackBottom <const> = 204
+local recipeListStartY <const> = 52
+local recipeListLastY <const> = 190
 
 local wheelCenterX <const> = 351
 local wheelCenterY <const> = 116
@@ -26,11 +31,28 @@ local activeCardHeight <const> = 50
 
 local systemFont <const> = gfx.getSystemFont()
 local smallFont <const> =
-    gfx.font.new("/System/Fonts/Roobert-11-Medium") or systemFont
+    gfx.font.new("/System/Fonts/Roobert-10-Bold") or systemFont
 
 local grayTextImages = {}
 
 AssemblyWorkstation = {}
+AssemblyWorkstation.usesCrank = true
+local juice = Juicy.new()
+local lastJuiceTime = pd.getCurrentTimeMilliseconds()
+local completionPending = false
+local function impactLayers(newIndex)
+    local direction = newIndex % 2 == 0 and 1 or -1
+    juice:ingredientLand(newIndex, { direction = direction })
+    for index = 0, newIndex - 1 do
+        local depth = newIndex - index
+        juice:ingredientLand(index, {
+            secondary = true, direction = direction,
+            impactWeight = .2 + .3 * index / math.max(1, newIndex - 1),
+            delay = depth * Juicy.config.propagation,
+        })
+    end
+    juice:ingredientLand("burger", { group = true })
+end
 
 local function countIngredients(items, firstIndex)
     local counts = {}
@@ -84,6 +106,10 @@ function AssemblyWorkstation.addIngredient(ingredientCode)
     end
 
     assembly.layers[#assembly.layers + 1] = ingredientCode
+    impactLayers(#assembly.layers)
+    if ingredientCode == "P" then
+        juice:verticalShake(#assembly.layers, Juicy.config.heavyShakeDuration)
+    end
     return true
 end
 
@@ -92,6 +118,8 @@ function AssemblyWorkstation.selectRandomRecipe()
 end
 
 function AssemblyWorkstation.initialize()
+    juice:clear()
+    completionPending = false
     assembly.layers = {}
     assembly.hasTopBread = false
     assembly.lastResult = nil
@@ -102,6 +130,8 @@ function AssemblyWorkstation.initialize()
 end
 
 function AssemblyWorkstation.serveBurger()
+    juice:clear()
+    completionPending = false
     local currentRecipe = PlayerConfig.recipe[assembly.currentRecipeIndex]
     local isCorrect = AssemblyWorkstation.isBurgerCorrect(
         currentRecipe,
@@ -163,8 +193,19 @@ function AssemblyWorkstation.advanceWheelAnimation()
 end
 
 function AssemblyWorkstation.pressUp()
+    if completionPending then return "animating" end
     if not assembly.hasTopBread then
         assembly.hasTopBread = true
+        local index = #assembly.layers + 1
+        impactLayers(index)
+        juice:ingredientLand(index, { impactWeight = 1, direction = -1, duration = .14 })
+        completionPending = true
+        local _, _, height, offset, baseY = AssemblyWorkstation.getStackLayout(
+            #PlayerConfig.recipe[assembly.currentRecipeIndex] - 1)
+        juice:burgerComplete("burger", {
+            x = 203, y = baseY + height - index * offset, width = 110,
+            onComplete = function() completionPending = false end,
+        })
         return "closed"
     end
 
@@ -176,11 +217,14 @@ function AssemblyWorkstation.pressUp()
 end
 
 function AssemblyWorkstation.handleInput()
-    if pd.buttonJustPressed(pd.kButtonDown) and
+    if pd.buttonJustPressed(pd.kButtonB) then juice:errorShake("error") end
+    if (pd.buttonJustPressed(pd.kButtonDown) or pd.buttonJustPressed(pd.kButtonA)) and
         not assembly.wheelIsAnimating then
         local selectedCode =
             assembly.ingredientCodes[assembly.selectedIngredientIndex]
-        AssemblyWorkstation.addIngredient(selectedCode)
+        if not AssemblyWorkstation.addIngredient(selectedCode) then
+            juice:errorShake("error")
+        end
     end
 
     if pd.buttonJustPressed(pd.kButtonUp) then
@@ -189,6 +233,9 @@ function AssemblyWorkstation.handleInput()
 end
 
 function AssemblyWorkstation.update(isActive)
+    local now = pd.getCurrentTimeMilliseconds()
+    juice:update(math.max(0, now - lastJuiceTime) / 1000)
+    lastJuiceTime = now
     if assembly.wheelIsAnimating then
         AssemblyWorkstation.advanceWheelAnimation()
         return
@@ -250,6 +297,58 @@ local function getRecipeRequirements(recipe)
     return order, counts
 end
 
+function AssemblyWorkstation.getRecipeLineSpacing(requirementCount)
+    if requirementCount <= 1 then
+        return 22
+    end
+
+    return math.min(
+        22,
+        math.floor(
+            (recipeListLastY - recipeListStartY) /
+                (requirementCount - 1)
+        )
+    )
+end
+
+function AssemblyWorkstation.getStackLayout(ingredientCount)
+    if ingredientCount <= 4 then
+        return
+            stackX,
+            stackWidth,
+            layerHeight,
+            layerOffset,
+            baseLayerY
+    end
+
+    local stepCount = ingredientCount + 1
+    local availableHeight = stackBottom - compactStackTop
+    local compactHeight = math.floor(
+        availableHeight / (1 + stepCount * 0.20)
+    )
+    local compactOffset = math.max(
+        smallFont:getHeight(),
+        math.floor(compactHeight * 0.20)
+    )
+    compactHeight = math.min(
+        layerHeight,
+        availableHeight - stepCount * compactOffset
+    )
+    local compactWidth = math.floor(compactHeight * 4 / 3)
+    local centerPanelWidth = ingredientPanelLeft - recipePanelRight
+    local compactX = recipePanelRight + math.floor(
+        (centerPanelWidth - compactWidth) / 2
+    )
+    local compactBaseY = stackBottom - compactHeight
+
+    return
+        compactX,
+        compactWidth,
+        compactHeight,
+        compactOffset,
+        compactBaseY
+end
+
 local function drawRecipe()
     local currentRecipe = PlayerConfig.recipe[assembly.currentRecipeIndex]
     local order, requiredCounts = getRecipeRequirements(currentRecipe)
@@ -259,6 +358,9 @@ local function drawRecipe()
     gfx.drawText(currentRecipe[1], 8, 28)
     gfx.setFont(smallFont)
 
+    local lineSpacing =
+        AssemblyWorkstation.getRecipeLineSpacing(#order)
+
     for lineIndex, ingredientCode in ipairs(order) do
         local requiredCount = requiredCounts[ingredientCode]
         local text = assembly.ingredientNames[ingredientCode]
@@ -267,7 +369,8 @@ local function drawRecipe()
             text = text .. " *" .. requiredCount
         end
 
-        local y = 52 + (lineIndex - 1) * 22
+        local y = recipeListStartY +
+            (lineIndex - 1) * lineSpacing
         local requirementIsMet =
             (addedCounts[ingredientCode] or 0) >= requiredCount
 
@@ -281,49 +384,107 @@ local function drawRecipe()
     gfx.setFont(systemFont)
 end
 
-local function drawLayer(label, y, isBread)
-    gfx.setColor(gfx.kColorWhite)
+local function drawLayer(
+    label,
+    y,
+    isBread,
+    x,
+    width,
+    height,
+    offset,
+    id
+)
+    local t = juice:getTransform(id)
+    local group = juice:getTransform("burger")
+    local err = juice:getTransform("error")
+    local shakeX, shakeY = juice:getScreenOffset("burger")
+    -- Transform the stack about its bottom, then each layer about its own bottom.
+    -- These are draw-local values; permanent layout coordinates never change.
+    local center = x + width / 2
+    local bottom = stackBottom + (y + height - stackBottom) * group.scaleY
+    width = math.floor(width * math.max(.90, math.min(1.12, t.scaleX * group.scaleX)) + .5)
+    height = math.floor(height * math.max(.82, math.min(1.10, t.scaleY * group.scaleY)) + .5)
+    x = math.floor(center - width / 2 + t.offsetX + group.offsetX + err.offsetX + shakeX + .5)
+    y = math.floor(bottom - height + t.offsetY + group.offsetY + shakeY + .5)
+    local inverted = t.invert or group.invert or err.invert
+    gfx.setColor(inverted and gfx.kColorBlack or gfx.kColorWhite)
     gfx.fillRoundRect(
-        stackX,
+        x,
         y,
-        stackWidth,
-        layerHeight,
+        width,
+        height,
         isBread and 8 or 3
     )
-    gfx.setColor(gfx.kColorBlack)
+    gfx.setColor(inverted and gfx.kColorWhite or gfx.kColorBlack)
     gfx.setLineWidth(isBread and 3 or 2)
     gfx.drawRoundRect(
-        stackX,
+        x,
         y,
-        stackWidth,
-        layerHeight,
+        width,
+        height,
         isBread and 8 or 3
     )
     gfx.setFont(smallFont)
+    local textOffsetY = math.max(
+        0,
+        math.floor((offset - smallFont:getHeight()) / 2)
+    )
+    local oldMode = gfx.getImageDrawMode()
+    if inverted then gfx.setImageDrawMode(gfx.kDrawModeInverted) end
     gfx.drawText(
         label,
-        stackX + 7,
-        y + layerHeight - layerOffset + 2
+        x + 7,
+        y + height - offset + textOffsetY
     )
+    gfx.setImageDrawMode(oldMode)
     gfx.setFont(systemFont)
 end
 
 local function drawBurger()
-    drawLayer("BREAD", baseLayerY, true)
+    local currentRecipe =
+        PlayerConfig.recipe[assembly.currentRecipeIndex]
+    local ingredientCount = #currentRecipe - 1
+    local x, width, height, offset, baseY =
+        AssemblyWorkstation.getStackLayout(ingredientCount)
+
+    drawLayer(
+        "BREAD",
+        baseY,
+        true,
+        x,
+        width,
+        height,
+        offset,
+        0
+    )
 
     for layerIndex, ingredientCode in ipairs(assembly.layers) do
-        local layerY = baseLayerY - layerIndex * layerOffset
+        local layerY = baseY - layerIndex * offset
         drawLayer(
             assembly.ingredientNames[ingredientCode],
             layerY,
-            false
+            false,
+            x,
+            width,
+            height,
+            offset,
+            layerIndex
         )
     end
 
     if assembly.hasTopBread then
         local topBreadY =
-            baseLayerY - (#assembly.layers + 1) * layerOffset
-        drawLayer("BREAD", topBreadY, true)
+            baseY - (#assembly.layers + 1) * offset
+        drawLayer(
+            "BREAD",
+            topBreadY,
+            true,
+            x,
+            width,
+            height,
+            offset,
+            #assembly.layers + 1
+        )
     end
 end
 
@@ -420,6 +581,22 @@ local function drawIngredientWheel()
     gfx.clearClipRect()
 end
 
+local function drawInventoryStatus()
+    local currentRecipe =
+        PlayerConfig.recipe[assembly.currentRecipeIndex]
+
+    if #currentRecipe - 1 > 4 then
+        gfx.setFont(smallFont)
+        gfx.drawText("SCORE: " .. PlayerConfig.score, 110, 7)
+        gfx.drawText("PATTY: " .. PlayerConfig.patties, 250, 7)
+        gfx.setFont(systemFont)
+        return
+    end
+
+    gfx.drawText("SCORE: " .. PlayerConfig.score, 112, 7)
+    gfx.drawText("PATTY: " .. PlayerConfig.patties, 213, 7)
+end
+
 function AssemblyWorkstation.draw()
     gfx.setColor(gfx.kColorBlack)
     gfx.drawLine(recipePanelRight, 0, recipePanelRight, 210)
@@ -427,10 +604,10 @@ function AssemblyWorkstation.draw()
 
     drawRecipe()
     drawBurger()
+    juice:drawParticles()
     drawIngredientWheel()
 
-    gfx.drawText("SCORE: " .. PlayerConfig.score, 112, 7)
-    gfx.drawText("PATTY: " .. PlayerConfig.patties, 213, 7)
+    drawInventoryStatus()
 
     if assembly.lastResult ~= nil then
         gfx.drawText(assembly.lastResult, 167, 31)
@@ -439,6 +616,6 @@ function AssemblyWorkstation.draw()
     if assembly.hasTopBread then
         gfx.drawText("UP: SERVE", 157, 211)
     else
-        gfx.drawText("DOWN: ADD   UP: BREAD", 110, 211)
+        gfx.drawText("A/DOWN: ADD  UP: BREAD", 110, 211)
     end
 end

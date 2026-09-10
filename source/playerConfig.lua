@@ -1,3 +1,5 @@
+import "recipes"
+
 PlayerConfig = {
     screenWidth = 400,
     screenHeight = 240,
@@ -11,14 +13,7 @@ PlayerConfig = {
     patties = 0,
     score = 0,
 
-    -- Recipe format: { name, ingredientCode, ingredientCode, ... }
-    recipe = {
-        { "CLASSIC", "P", "T", "L", "C" },
-        { "DOUBLE", "P", "P", "C", "C", "K" },
-        { "BREAKFAST", "P", "E", "S", "T" },
-        { "FOREST", "P", "M", "F", "C" },
-        { "TOWER", "P", "P", "P", "P", "T", "C", "C" },
-    },
+    recipe = Recipes,
 
     grinder = {
         possibleYields = { 60, 70, 80, 90, 100 },
@@ -49,7 +44,7 @@ PlayerConfig = {
     assembly = {
         ingredientCodes = {
             "P", "O", "T", "L", "K",
-            "E", "M", "F", "C", "S",
+            "E", "M", "B", "A", "S",
         },
         ingredientNames = {
             P = "PATTY",
@@ -59,9 +54,9 @@ PlayerConfig = {
             K = "PICKLE",
             E = "EGG",
             M = "MUSHROOM",
-            F = "CARAMEL ONION",
-            C = "CHEESE",
-            S = "ENGLISH CHEESE",
+            B = "BACON",
+            A = "A. CHEESE",
+            S = "S. CHEESE",
         },
         crankTicksPerTurn = 12,
         selectedIngredientIndex = 1,

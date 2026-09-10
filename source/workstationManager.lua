@@ -36,6 +36,15 @@ function WorkstationManager.handleActiveInput()
     end
 end
 
+function WorkstationManager.activeUsesCrank()
+    local controller = controllers[PlayerConfig.activeWorkstation]
+    return controller ~= nil and controller.usesCrank == true
+end
+
+function WorkstationManager.shouldShowCrankIndicator(isCrankDocked)
+    return isCrankDocked and WorkstationManager.activeUsesCrank()
+end
+
 function WorkstationManager.drawActive()
     local controller = controllers[PlayerConfig.activeWorkstation]
 
