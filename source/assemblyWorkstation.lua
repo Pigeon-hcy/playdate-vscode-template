@@ -10,13 +10,12 @@ local assembly <const> = PlayerConfig.assembly
 
 local recipePanelRight <const> = 104
 local ingredientPanelLeft <const> = 302
-local stackX <const> = 139
-local stackWidth <const> = 128
-local layerHeight <const> = 96
-local layerOffset <const> = 19
-local baseLayerY <const> = 108
-local compactStackTop <const> = 8
+-- Sprites are trimmed to their drawn content and stacked by their bottom
+-- edge; each layer then rises by the thickness of the one below it, so the
+-- burger packs as tightly as the art allows.
+local stackCenterX <const> = 203
 local stackBottom <const> = 204
+local compactStackTop <const> = 8
 local recipeListStartY <const> = 52
 local recipeListLastY <const> = 190
 
@@ -35,6 +34,51 @@ local smallFont <const> =
     gfx.font.new("/System/Fonts/Roobert-10-Bold") or systemFont
 
 local grayTextImages = {}
+
+local spriteDirectory <const> = "resource/ingredients/"
+
+local spriteWidth = 0
+local maxSpriteHeight = 0
+
+local function loadSprite(name)
+    local image, loadError = gfx.image.new(spriteDirectory .. name)
+    assert(image, loadError)
+
+    local width, height = image:getSize()
+    spriteWidth = math.max(spriteWidth, width)
+    maxSpriteHeight = math.max(maxSpriteHeight, height)
+
+    return image
+end
+
+local ingredientImages <const> = {}
+
+for ingredientCode, spriteName in pairs(assembly.ingredientSprites) do
+    ingredientImages[ingredientCode] = loadSprite(spriteName)
+end
+
+local bottomBreadImage <const> = loadSprite(assembly.breadSprites.bottom)
+local topBreadImage <const> = loadSprite(assembly.breadSprites.top)
+
+-- Mirrored copies for repeated ingredients: baking them once keeps the
+-- variant a plain blit, where flipping at draw time would not.
+local function makeFlippedSprite(image)
+    local width, height = image:getSize()
+    local flipped = gfx.image.new(width, height, gfx.kColorClear)
+
+    gfx.pushContext(flipped)
+        image:draw(0, 0, gfx.kImageFlippedX)
+    gfx.popContext()
+
+    return flipped
+end
+
+local flippedIngredientImages <const> = {}
+
+for ingredientCode, image in pairs(ingredientImages) do
+    flippedIngredientImages[ingredientCode] = makeFlippedSprite(image)
+end
+
 
 AssemblyWorkstation = {}
 AssemblyWorkstation.usesCrank = true
@@ -117,7 +161,16 @@ function AssemblyWorkstation.addIngredient(ingredientCode)
         PlayerConfig.patties -= 1
     end
 
+    local repeatCount = 0
+
+    for _, existingCode in ipairs(assembly.layers) do
+        if existingCode == ingredientCode then
+            repeatCount += 1
+        end
+    end
+
     assembly.layers[#assembly.layers + 1] = ingredientCode
+    assembly.layerRepeats[#assembly.layers] = repeatCount
     impactLayers(#assembly.layers)
     if ingredientCode == "P" then
         juice:verticalShake(#assembly.layers, Juicy.config.heavyShakeDuration)
@@ -133,6 +186,7 @@ function AssemblyWorkstation.initialize()
     clearBurgerJuice()
     completionPending = false
     assembly.layers = {}
+    assembly.layerRepeats = {}
     assembly.hasTopBread = false
     assembly.lastResult = nil
     assembly.wheelIsAnimating = false
@@ -159,6 +213,7 @@ function AssemblyWorkstation.serveBurger()
     end
 
     assembly.layers = {}
+    assembly.layerRepeats = {}
     assembly.hasTopBread = false
     AssemblyWorkstation.selectRandomRecipe()
 
@@ -212,10 +267,10 @@ function AssemblyWorkstation.pressUp()
         impactLayers(index)
         juice:ingredientLand(index, { impactWeight = 1, direction = -1, duration = .14 })
         completionPending = true
-        local _, _, height, offset, baseY = AssemblyWorkstation.getStackLayout(
-            #PlayerConfig.recipe[assembly.currentRecipeIndex] - 1)
         juice:burgerComplete("burger", {
-            x = 203, y = baseY + height - index * offset, width = 110,
+            x = stackCenterX,
+            y = AssemblyWorkstation.getTopLayerBottom(),
+            width = spriteWidth,
             onComplete = function() completionPending = false end,
         })
         return "closed"
@@ -320,42 +375,39 @@ function AssemblyWorkstation.getRecipeLineSpacing(requirementCount)
     )
 end
 
-function AssemblyWorkstation.getStackLayout(ingredientCount)
-    if ingredientCount <= 4 then
-        return
-            stackX,
-            stackWidth,
-            layerHeight,
-            layerOffset,
-            baseLayerY
+-- Sprites are drawn 1:1 so their dither stays crisp. A recipe too tall for
+-- the panel shrinks every step by one shared factor, computed from the recipe
+-- rather than the layers placed so far so nothing shifts mid-build.
+function AssemblyWorkstation.getStackLayout(recipe)
+    local required = assembly.breadThickness.bottom
+
+    for recipeIndex = 2, #recipe do
+        required += assembly.spriteThickness[recipe[recipeIndex]] or 0
     end
 
-    local stepCount = ingredientCount + 1
-    local availableHeight = stackBottom - compactStackTop
-    local compactHeight = math.floor(
-        availableHeight / (1 + stepCount * 0.20)
-    )
-    local compactOffset = math.max(
-        smallFont:getHeight(),
-        math.floor(compactHeight * 0.20)
-    )
-    compactHeight = math.min(
-        layerHeight,
-        availableHeight - stepCount * compactOffset
-    )
-    local compactWidth = math.floor(compactHeight * 4 / 3)
-    local centerPanelWidth = ingredientPanelLeft - recipePanelRight
-    local compactX = recipePanelRight + math.floor(
-        (centerPanelWidth - compactWidth) / 2
-    )
-    local compactBaseY = stackBottom - compactHeight
+    local available = stackBottom - compactStackTop - maxSpriteHeight
+    local scale = 1
 
-    return
-        compactX,
-        compactWidth,
-        compactHeight,
-        compactOffset,
-        compactBaseY
+    if required > available and required > 0 then
+        scale = available / required
+    end
+
+    return stackCenterX, scale, stackBottom
+end
+
+-- Where the top bun lands, for the completion burst.
+function AssemblyWorkstation.getTopLayerBottom()
+    local currentRecipe = PlayerConfig.recipe[assembly.currentRecipeIndex]
+    local _, scale, bottom =
+        AssemblyWorkstation.getStackLayout(currentRecipe)
+
+    bottom -= assembly.breadThickness.bottom * scale
+
+    for _, ingredientCode in ipairs(assembly.layers) do
+        bottom -= (assembly.spriteThickness[ingredientCode] or 0) * scale
+    end
+
+    return bottom
 end
 
 local function drawRecipe()
@@ -393,105 +445,97 @@ local function drawRecipe()
     gfx.setFont(systemFont)
 end
 
-local function drawLayer(
-    label,
-    y,
-    isBread,
-    x,
-    width,
-    height,
-    offset,
-    id
-)
+local function drawLayer(image, bottom, seat, rotation, id)
     local t = juice:getTransform(id)
+
+    if not t.visible then
+        return
+    end
+
     local group = juice:getTransform("burger")
     local err = juice:getTransform("error")
     local shakeX, shakeY = juice:getScreenOffset("burger")
-    -- Transform the stack about its bottom, then each layer about its own bottom.
-    -- These are draw-local values; permanent layout coordinates never change.
-    local center = x + width / 2
-    local bottom = stackBottom + (y + height - stackBottom) * group.scaleY
-    width = math.floor(width * math.max(.90, math.min(1.12, t.scaleX * group.scaleX)) + .5)
-    height = math.floor(height * math.max(.82, math.min(1.10, t.scaleY * group.scaleY)) + .5)
-    x = math.floor(center - width / 2 + t.offsetX + group.offsetX + err.offsetX + shakeX + .5)
-    y = math.floor(bottom - height + t.offsetY + group.offsetY + shakeY + .5)
-    local inverted = t.invert or group.invert or err.invert
-    gfx.setColor(inverted and gfx.kColorBlack or gfx.kColorWhite)
-    gfx.fillRoundRect(
-        x,
-        y,
-        width,
-        height,
-        isBread and 8 or 3
+    local width, height = image:getSize()
+    -- Transform the stack about its bottom, then each layer about its own
+    -- bottom. These are draw-local values; layout coordinates never change.
+    local stackedBottom =
+        stackBottom + (bottom - stackBottom) * group.scaleY
+    local scaleX = math.max(.90, math.min(1.12, t.scaleX * group.scaleX))
+    local scaleY = math.max(.82, math.min(1.10, t.scaleY * group.scaleY))
+    local drawWidth = width * scaleX
+    local drawHeight = height * scaleY
+    local drawX = math.floor(
+        stackCenterX - drawWidth / 2 +
+            t.offsetX + group.offsetX + err.offsetX + shakeX + .5
     )
-    gfx.setColor(inverted and gfx.kColorWhite or gfx.kColorBlack)
-    gfx.setLineWidth(isBread and 3 or 2)
-    gfx.drawRoundRect(
-        x,
-        y,
-        width,
-        height,
-        isBread and 8 or 3
+    local drawY = math.floor(
+        stackedBottom - drawHeight + seat * scaleY +
+            t.offsetY + group.offsetY + shakeY + .5
     )
-    gfx.setFont(smallFont)
-    local textOffsetY = math.max(
-        0,
-        math.floor((offset - smallFont:getHeight()) / 2)
-    )
+
     local oldMode = gfx.getImageDrawMode()
-    if inverted then gfx.setImageDrawMode(gfx.kDrawModeInverted) end
-    gfx.drawText(
-        label,
-        x + 7,
-        y + height - offset + textOffsetY
-    )
+
+    if t.invert or group.invert or err.invert then
+        gfx.setImageDrawMode(gfx.kDrawModeInverted)
+    end
+
+    -- Most frames carry no juice, so keep the unscaled blit off drawScaled.
+    if rotation ~= 0 then
+        image:drawRotated(
+            drawX + drawWidth / 2,
+            drawY + drawHeight / 2,
+            rotation,
+            scaleX,
+            scaleY
+        )
+    elseif scaleX == 1 and scaleY == 1 then
+        image:draw(drawX, drawY)
+    else
+        image:drawScaled(drawX, drawY, scaleX, scaleY)
+    end
+
     gfx.setImageDrawMode(oldMode)
-    gfx.setFont(systemFont)
 end
 
 local function drawBurger()
     local currentRecipe =
         PlayerConfig.recipe[assembly.currentRecipeIndex]
-    local ingredientCount = #currentRecipe - 1
-    local x, width, height, offset, baseY =
-        AssemblyWorkstation.getStackLayout(ingredientCount)
+    local _, scale, bottom =
+        AssemblyWorkstation.getStackLayout(currentRecipe)
 
     drawLayer(
-        "BREAD",
-        baseY,
-        true,
-        x,
-        width,
-        height,
-        offset,
+        bottomBreadImage,
+        bottom,
+        assembly.breadBaselines.bottom,
+        0,
         0
     )
+    bottom -= assembly.breadThickness.bottom * scale
 
     for layerIndex, ingredientCode in ipairs(assembly.layers) do
-        local layerY = baseY - layerIndex * offset
+        local variant = assembly.repeatVariants[
+            ((assembly.layerRepeats[layerIndex] or 0) %
+                #assembly.repeatVariants) + 1
+        ]
+        local sprites = variant.flip and flippedIngredientImages
+            or ingredientImages
+
         drawLayer(
-            assembly.ingredientNames[ingredientCode],
-            layerY,
-            false,
-            x,
-            width,
-            height,
-            offset,
+            sprites[ingredientCode],
+            bottom,
+            assembly.spriteBaselines[ingredientCode] or 0,
+            variant.rotation,
             layerIndex
         )
+        bottom -= (assembly.spriteThickness[ingredientCode] or 0) * scale
     end
 
     if assembly.hasTopBread then
-        local topBreadY =
-            baseY - (#assembly.layers + 1) * offset
         drawLayer(
-            "BREAD",
-            topBreadY,
-            true,
-            x,
-            width,
-            height,
-            offset,
+            topBreadImage,
+            bottom,
+            assembly.breadBaselines.top,
+            0,
             #assembly.layers + 1
         )
     end
