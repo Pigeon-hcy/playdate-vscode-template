@@ -2,6 +2,7 @@ import "CoreLibs/graphics"
 import "CoreLibs/crank"
 import "playerConfig"
 import "juicy"
+import "juiceRuntime"
 
 local pd <const> = playdate
 local gfx <const> = playdate.graphics
@@ -37,9 +38,20 @@ local grayTextImages = {}
 
 AssemblyWorkstation = {}
 AssemblyWorkstation.usesCrank = true
-local juice = Juicy.new()
-local lastJuiceTime = pd.getCurrentTimeMilliseconds()
+local juice <const> = Juice
 local completionPending = false
+
+-- Retire only the ids this workstation owns: the shared instance also
+-- carries the other workstations' effects, so Juicy:clear would wipe them.
+local function clearBurgerJuice()
+    for layerIndex = 0, #assembly.layers + 1 do
+        juice:remove(layerIndex)
+    end
+
+    juice:remove("burger")
+    juice:remove("error")
+end
+
 local function impactLayers(newIndex)
     local direction = newIndex % 2 == 0 and 1 or -1
     juice:ingredientLand(newIndex, { direction = direction })
@@ -118,7 +130,7 @@ function AssemblyWorkstation.selectRandomRecipe()
 end
 
 function AssemblyWorkstation.initialize()
-    juice:clear()
+    clearBurgerJuice()
     completionPending = false
     assembly.layers = {}
     assembly.hasTopBread = false
@@ -130,7 +142,7 @@ function AssemblyWorkstation.initialize()
 end
 
 function AssemblyWorkstation.serveBurger()
-    juice:clear()
+    clearBurgerJuice()
     completionPending = false
     local currentRecipe = PlayerConfig.recipe[assembly.currentRecipeIndex]
     local isCorrect = AssemblyWorkstation.isBurgerCorrect(
@@ -233,9 +245,6 @@ function AssemblyWorkstation.handleInput()
 end
 
 function AssemblyWorkstation.update(isActive)
-    local now = pd.getCurrentTimeMilliseconds()
-    juice:update(math.max(0, now - lastJuiceTime) / 1000)
-    lastJuiceTime = now
     if assembly.wheelIsAnimating then
         AssemblyWorkstation.advanceWheelAnimation()
         return

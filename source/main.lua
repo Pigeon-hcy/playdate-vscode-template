@@ -1,16 +1,17 @@
 import "CoreLibs/graphics"
 import "CoreLibs/ui"
 import "playerConfig"
+import "juiceRuntime"
 import "workstationManager"
 import "grinderWorkstation"
 import "fryingWorkstation"
 import "assemblyWorkstation"
-import "Juice"
 
 local pd <const> = playdate
 local gfx <const> = playdate.graphics
 local crankIndicator <const> = pd.ui.crankIndicator
 local wasShowingCrankIndicator = false
+local lastJuiceMilliseconds = pd.getCurrentTimeMilliseconds()
 
 pd.display.setRefreshRate(PlayerConfig.refreshRate)
 
@@ -24,18 +25,18 @@ GrinderWorkstation.initialize()
 AssemblyWorkstation.initialize()
 
 function playdate.update()
-    Juice.update()
+    local now = pd.getCurrentTimeMilliseconds()
+    Juice:update(math.max(0, now - lastJuiceMilliseconds) / 1000)
+    lastJuiceMilliseconds = now
 
-    if not Juice.isFrozen() then
-        if pd.buttonJustPressed(pd.kButtonLeft) then
-            WorkstationManager.switch(-1)
-        elseif pd.buttonJustPressed(pd.kButtonRight) then
-            WorkstationManager.switch(1)
-        end
-
-        WorkstationManager.handleActiveInput()
-        WorkstationManager.updateAll()
+    if pd.buttonJustPressed(pd.kButtonLeft) then
+        WorkstationManager.switch(-1)
+    elseif pd.buttonJustPressed(pd.kButtonRight) then
+        WorkstationManager.switch(1)
     end
+
+    WorkstationManager.handleActiveInput()
+    WorkstationManager.updateAll()
 
     gfx.clear()
 
@@ -46,8 +47,6 @@ function playdate.update()
             110
         )
     end
-
-    Juice.draw()
 
     local shouldShowCrankIndicator =
         WorkstationManager.shouldShowCrankIndicator(
