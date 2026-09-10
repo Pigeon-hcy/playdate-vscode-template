@@ -5,19 +5,61 @@ local pd <const> = playdate
 local gfx <const> = playdate.graphics
 local frying <const> = PlayerConfig.frying
 
-local fryerX <const> = 14
-local fryerY <const> = 38
-local fryerWidth <const> = 372
-local fryerHeight <const> = 166
-
-local gridX <const> = 27
-local gridY <const> = 60
-local pattyWidth <const> = 76
-local pattyHeight <const> = 50
-local columnGap <const> = 16
-local rowGap <const> = 24
+local trayScale <const> = 2
+local trayX <const> = 40
+local trayY <const> = 40
 local dropDistance <const> = 32
 local riseDistance <const> = 40
+
+-- Centre of each slot's patty on the scaled tray, relative to its top-left:
+-- two zones either side of the divider, two columns each. The grate is drawn
+-- in shallow perspective, so the front row spreads wider than the back.
+-- Slots 1-4 are the back row and draw first, so the front row overlaps them
+-- as a patty drops in. Centres rather than bottoms, because the sprites'
+-- outline ring pads every side evenly.
+local slotAnchors <const> = {
+    { 61, 55 }, { 123, 55 }, { 195, 55 }, { 257, 55 },
+    { 54, 87 }, { 121, 87 }, { 198, 87 }, { 264, 87 },
+}
+
+assert(
+    #slotAnchors == frying.slotCount,
+    "slotAnchors must list one position per frying slot"
+)
+
+local function loadImage(path)
+    local image, loadError = gfx.image.new(path)
+    assert(image, loadError)
+    return image
+end
+
+-- The tray is authored at 160 px; an integer scale keeps its 1-bit pixels
+-- crisp. Baking it once onto white -- the cleared screen colour, so it looks
+-- identical -- leaves each frame a plain opaque blit with no mask.
+local function bakeTray()
+    local source = loadImage("resource/GrillTray")
+    local width, height = source:getSize()
+    local baked = gfx.image.new(
+        width * trayScale,
+        height * trayScale,
+        gfx.kColorWhite
+    )
+
+    gfx.pushContext(baked)
+        source:drawScaled(0, 0, trayScale)
+    gfx.popContext()
+
+    return baked
+end
+
+local trayImage <const> = bakeTray()
+
+-- Built by tools/build_station_sprites.py at half size, so two fit per zone.
+local pattyImages <const> = {
+    raw = loadImage("resource/grill/RawPatty"),
+    cooked = loadImage("resource/grill/CookedPatty"),
+    burning = loadImage("resource/grill/BurntPatty"),
+}
 
 FryingWorkstation = {}
 
@@ -120,13 +162,12 @@ function FryingWorkstation.handleInput()
 end
 
 local function getSlotPosition(slotIndex)
-    local zeroBasedIndex = slotIndex - 1
-    local column = zeroBasedIndex % 4
-    local row = math.floor(zeroBasedIndex / 4)
+    local anchor = slotAnchors[slotIndex]
+    local width, height = pattyImages.raw:getSize()
 
     return
-        gridX + column * (pattyWidth + columnGap),
-        gridY + row * (pattyHeight + rowGap)
+        trayX + anchor[1] - math.floor(width / 2),
+        trayY + anchor[2] - math.floor(height / 2)
 end
 
 local function getAnimatedPattyY(patty, targetY)
@@ -172,34 +213,33 @@ function FryingWorkstation.getFillProgress(patty)
     return 1, 1
 end
 
-local function fillPattyByState(patty, x, y)
-    local grayProgress, blackProgress =
+-- The next state dissolves in over the current one as it cooks, so the patty
+-- itself shows how close it is to done, and then to burning.
+local function drawPattySprite(patty, x, y)
+    local cookProgress, burnProgress =
         FryingWorkstation.getFillProgress(patty)
+    local baseImage, nextImage, progress
 
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRect(x, y, pattyWidth, pattyHeight)
+    if patty.state == "raw" then
+        baseImage, nextImage, progress =
+            pattyImages.raw, pattyImages.cooked, cookProgress
+    elseif patty.state == "cooked" then
+        baseImage, nextImage, progress =
+            pattyImages.cooked, pattyImages.burning, burnProgress
+    else
+        baseImage, nextImage, progress = pattyImages.burning, nil, 0
+    end
 
-    local grayWidth = math.floor(pattyWidth * grayProgress)
+    baseImage:draw(x, y)
 
-    if grayWidth > 0 then
-        gfx.setColor(gfx.kColorBlack)
-        gfx.setDitherPattern(
-            0.5,
+    if nextImage ~= nil and progress > 0 then
+        nextImage:drawFaded(
+            x,
+            y,
+            progress,
             gfx.image.kDitherTypeBayer8x8
         )
-        gfx.fillRect(x, y, grayWidth, pattyHeight)
     end
-
-    local blackWidth = math.floor(pattyWidth * blackProgress)
-
-    if blackWidth > 0 then
-        gfx.setColor(gfx.kColorBlack)
-        gfx.fillRect(x, y, blackWidth, pattyHeight)
-    end
-
-    gfx.setColor(gfx.kColorBlack)
-    gfx.setLineWidth(3)
-    gfx.drawRect(x, y, pattyWidth, pattyHeight)
 end
 
 local function drawPatty(slotIndex)
@@ -211,7 +251,7 @@ local function drawPatty(slotIndex)
     end
 
     local animatedY = math.floor(getAnimatedPattyY(patty, y))
-    fillPattyByState(patty, x, animatedY)
+    drawPattySprite(patty, x, animatedY)
 end
 
 function FryingWorkstation.draw()
@@ -220,11 +260,7 @@ function FryingWorkstation.draw()
     gfx.drawText("MINCED: " .. PlayerConfig.mincedMeat, 112, 8)
     gfx.drawText("PATTIES: " .. PlayerConfig.patties, 276, 8)
 
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRect(fryerX, fryerY, fryerWidth, fryerHeight)
-    gfx.setColor(gfx.kColorBlack)
-    gfx.setLineWidth(4)
-    gfx.drawRect(fryerX, fryerY, fryerWidth, fryerHeight)
+    trayImage:draw(trayX, trayY)
 
     for slotIndex = 1, frying.slotCount do
         drawPatty(slotIndex)
