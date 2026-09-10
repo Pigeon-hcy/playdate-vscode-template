@@ -19,15 +19,19 @@ local compactStackTop <const> = 8
 local recipeListStartY <const> = 52
 local recipeListLastY <const> = 190
 
-local wheelCenterX <const> = 351
+local wheelCardRight <const> = 396
 local wheelCenterY <const> = 116
 local wheelSpacing <const> = 39
-local outerCardWidth <const> = 60
-local outerCardHeight <const> = 30
-local nearCardWidth <const> = 74
-local nearCardHeight <const> = 38
+-- Cards hang off a shared right edge and only stretch in length: longest at
+-- the centre, shortest at the ends. Resizing both axes meant re-laying out
+-- every frame, and the outline needs no fill -- nothing is drawn behind this
+-- panel for it to mask.
+local cardHeight <const> = 34
 local activeCardWidth <const> = 96
-local activeCardHeight <const> = 50
+local cardWidthFalloff <const> = 17
+local minCardWidth <const> = 46
+local wheelClipY <const> = 24
+local wheelClipHeight <const> = 184
 
 local systemFont <const> = gfx.getSystemFont()
 local smallFont <const> =
@@ -79,6 +83,22 @@ for ingredientCode, image in pairs(ingredientImages) do
     flippedIngredientImages[ingredientCode] = makeFlippedSprite(image)
 end
 
+-- Wheel labels never change, so lay each one out once instead of running
+-- drawTextInRect for every visible card on every frame.
+local ingredientLabelImages <const> = {}
+
+for _, ingredientCode in ipairs(assembly.ingredientCodes) do
+    ingredientLabelImages[ingredientCode] = gfx.imageWithText(
+        assembly.ingredientNames[ingredientCode],
+        activeCardWidth,
+        cardHeight,
+        nil,
+        nil,
+        nil,
+        nil,
+        smallFont
+    )
+end
 
 AssemblyWorkstation = {}
 AssemblyWorkstation.usesCrank = true
@@ -548,66 +568,54 @@ local function getWrappedIngredient(relativeIndex)
     return assembly.ingredientCodes[index]
 end
 
-function AssemblyWorkstation.getWheelCardSize(position)
-    local distance = math.min(2, math.abs(position))
-
-    if distance <= 1 then
-        local centerBlend = 1 - distance
-        return
-            nearCardWidth +
-                (activeCardWidth - nearCardWidth) * centerBlend,
-            nearCardHeight +
-                (activeCardHeight - nearCardHeight) * centerBlend
-    end
-
-    local nearBlend = 2 - distance
-    return
-        outerCardWidth +
-            (nearCardWidth - outerCardWidth) * nearBlend,
-        outerCardHeight +
-            (nearCardHeight - outerCardHeight) * nearBlend
+function AssemblyWorkstation.getWheelCardWidth(position)
+    return math.max(
+        minCardWidth,
+        activeCardWidth - math.abs(position) * cardWidthFalloff
+    )
 end
 
 local function drawWheelCard(ingredientCode, position)
-    local distance = math.min(2, math.abs(position))
-    local centerBlend = math.max(0, 1 - distance)
-    local width, height =
-        AssemblyWorkstation.getWheelCardSize(position)
-    local x = math.floor(wheelCenterX - width / 2)
+    local width = AssemblyWorkstation.getWheelCardWidth(position)
+    local x = math.floor(wheelCardRight - width)
     local y = math.floor(
-        wheelCenterY + position * wheelSpacing - height / 2
+        wheelCenterY + position * wheelSpacing - cardHeight / 2
     )
 
-    gfx.setColor(gfx.kColorWhite)
-    gfx.fillRoundRect(x, y, width, height, 5)
     gfx.setColor(gfx.kColorBlack)
-    gfx.setLineWidth(centerBlend > 0.5 and 4 or 2)
-    gfx.drawRoundRect(x, y, width, height, 5)
+    gfx.setLineWidth(math.abs(position) < 0.5 and 3 or 1)
+    gfx.drawRect(x, y, width, cardHeight)
 
-    gfx.setFont(smallFont)
-    gfx.drawTextInRect(
-        assembly.ingredientNames[ingredientCode],
-        x + 3,
-        y + 3,
-        width - 6,
-        height - 6,
-        nil,
-        nil,
-        kTextAlignment.center
+    local label = ingredientLabelImages[ingredientCode]
+
+    if label == nil then
+        return
+    end
+
+    -- Clip to the card, kept inside the panel, so a long name truncates
+    -- rather than spilling over the border.
+    local clipTop = math.max(y, wheelClipY)
+    local clipBottom = math.min(y + cardHeight, wheelClipY + wheelClipHeight)
+
+    if clipBottom <= clipTop then
+        return
+    end
+
+    local labelWidth, labelHeight = label:getSize()
+    gfx.setClipRect(x + 5, clipTop, width - 10, clipBottom - clipTop)
+    label:draw(
+        math.floor(x + (width - labelWidth) / 2),
+        math.floor(y + (cardHeight - labelHeight) / 2)
     )
-    gfx.setFont(systemFont)
 end
 
 local function drawIngredientWheel()
     gfx.drawText("ITEMS", ingredientPanelLeft + 8, 7)
-    gfx.setClipRect(
-        ingredientPanelLeft + 1,
-        24,
-        PlayerConfig.screenWidth - ingredientPanelLeft - 1,
-        184
-    )
 
+    local panelWidth =
+        PlayerConfig.screenWidth - ingredientPanelLeft - 1
     local animationProgress = 0
+
     if assembly.wheelIsAnimating then
         animationProgress = assembly.wheelAnimationFrame /
             assembly.wheelAnimationDurationFrames
@@ -622,14 +630,21 @@ local function drawIngredientWheel()
         local position = relativeIndex + positionOffset
         local y = wheelCenterY + position * wheelSpacing
 
-        if y > -30 and y < 260 then
+        -- Skip the cards the panel would clip away entirely.
+        if y + cardHeight / 2 > wheelClipY and
+            y - cardHeight / 2 < wheelClipY + wheelClipHeight then
+            gfx.setClipRect(
+                ingredientPanelLeft + 1,
+                wheelClipY,
+                panelWidth,
+                wheelClipHeight
+            )
             drawWheelCard(
                 getWrappedIngredient(relativeIndex),
                 position
             )
         end
     end
-
 
     gfx.clearClipRect()
 end
