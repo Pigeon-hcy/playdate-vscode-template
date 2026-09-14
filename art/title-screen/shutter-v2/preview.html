@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bun Rush · 卷帘门开场</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#e9e8e4;color:#171717;font:14px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:28px}main{width:min(900px,100%)}h1{font-size:19px;margin:0 0 8px}p{color:#595956;line-height:1.6;margin:0 0 24px}.screen{display:block;width:100%;aspect-ratio:5/3;background:white;outline:2px solid #171717;cursor:pointer}.tools{display:flex;align-items:center;gap:16px;margin-top:20px}.tools input{flex:1;min-width:50px;accent-color:#161616}button{border:1px solid #666;border-radius:4px;padding:8px 14px;background:white;color:#111;cursor:pointer}small{display:block;margin-top:14px;color:#666}button:focus-visible,.screen:focus-visible{outline:3px solid #666;outline-offset:4px}#status{width:110px}
+</style>
+<main>
+<h1>餐车行驶 · 开场预览</h1>
+<p>横向 400 × 240 构图。按 A 或点击画面：车身颠簸与高速风景 → 放大卷帘门 → 标题滑入。标题出现后按 A 开始。</p>
+<svg class="screen" id="screen" viewBox="0 0 400 240" role="button" tabindex="0" aria-label="Press A to start" xmlns="http://www.w3.org/2000/svg">
+<defs>
+ <clipPath id="rearWheelDisc" clipPathUnits="userSpaceOnUse"><circle cx="91.6" cy="197.4" r="24"/></clipPath>
+ <clipPath id="frontWheelDisc" clipPathUnits="userSpaceOnUse"><circle cx="325.1" cy="197.4" r="24"/></clipPath>
+ <clipPath id="truckSilhouette" clipPathUnits="userSpaceOnUse">
+  <path d="M17 16H280V62H292L296 69H333L340 72L344 81L353 115L359 125L379 136L385 145V176H389V194H353C354 211 339 223 325 223C309 223 296 208 296 194H280L277 198H210L207 199H183L179 195H140L138 199H119C119 213 106 223 91 223C74 223 61 212 61 196H51L47 194H14L12 192V176L15 174V166H14V150H17Z"/>
+ </clipPath>
+ <pattern id="sceneryPattern" width="640" height="214" patternUnits="userSpaceOnUse"><image href="scenery-panorama-v5.png" width="640" height="214"/></pattern>
+ <pattern id="dissolvePattern" width="8" height="8" patternUnits="userSpaceOnUse"><path id="dissolvePixels" fill="black" shape-rendering="crispEdges"/></pattern>
+ <filter id="ink" color-interpolation-filters="sRGB" x="-2%" y="-3%" width="104%" height="106%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -.2126 -.7152 -.0722 0 1"/>
+  <feComponentTransfer><feFuncA type="discrete" tableValues="0 0 1 1"/></feComponentTransfer><feComposite in2="SourceAlpha" operator="in"/>
+ </filter>
+ <filter id="keyline" x="-3%" y="-5%" width="106%" height="110%">
+  <feMorphology in="SourceAlpha" operator="dilate" radius="1.2" result="edge"/>
+  <feFlood flood-color="white" result="white"/>
+  <feComposite in="white" in2="edge" operator="in" result="outline"/>
+  <feMerge><feMergeNode in="outline"/><feMergeNode in="SourceGraphic"/></feMerge>
+ </filter>
+</defs>
+<g id="world">
+<rect x="-800" y="-300" width="2000" height="800" fill="white"/>
+<rect id="scenery" x="-640" y="0" width="1920" height="214" fill="url(#sceneryPattern)"/>
+<g id="roadside" stroke="black" stroke-width="1.1" fill="none"></g>
+<g id="road" shape-rendering="crispEdges">
+ <rect x="-800" y="213" width="2000" height="100" fill="white"/>
+ <path d="M-800 213H1200" stroke="black" stroke-width="1"/>
+ <g id="roadMarks" fill="black"></g>
+</g>
+<g id="vehicleBounce">
+<g id="vehiclePlacement" transform="translate(20 12) scale(.9)">
+<image href="truck-side-v6.png" width="400" height="240" clip-path="url(#truckSilhouette)"/>
+<g id="rearWheel"><image href="truck-side-v6.png" width="400" height="240" clip-path="url(#rearWheelDisc)"/></g>
+<g id="frontWheel"><image href="truck-side-v6.png" width="400" height="240" clip-path="url(#frontWheelDisc)"/></g>
+<svg id="mountedMenu" x="35.061728" y="28.918641" width="229.135802" height="129.268795" viewBox="0 0 400 240" preserveAspectRatio="none" overflow="hidden">
+<image href="gameplay-reference.svg" width="400" height="240"/>
+<rect id="blackCover" width="400" height="240" fill="url(#dissolvePattern)"/>
+<g id="camera">
+ <g id="door">
+ <g id="bob">
+  <image href="shutter-west-coast-v3.png" y="-3" width="400" height="246" preserveAspectRatio="none"/>
+  <g id="title" filter="url(#keyline)"><image href="title-ink-master.png" x="38" y="-15" width="324" height="108" filter="url(#ink)"/></g>
+ <g id="particles" fill="black" shape-rendering="crispEdges"></g>
+ </g>
+  <path d="M0 235H400V240H0Z" fill="white" stroke="black" stroke-width="1.5"/>
+  <path d="M180 237h40" stroke="black" stroke-width="2"/>
+ </g>
+ <g id="frame" fill="none" stroke="black" stroke-width="1"><rect x=".5" y=".5" width="399" height="239"/></g>
+</g>
+<text id="start" x="200" y="222" text-anchor="middle" font-family="monospace" font-weight="900" font-size="10" letter-spacing=".65" stroke="white" stroke-width="3" paint-order="stroke" fill="black">PRESS A TO START</text>
+</svg>
+</g>
+</g>
+</g>
+</svg>
+<div class="tools"><button id="reset">重播</button><input id="scrub" type="range" min="0" max="5800" value="0" step="1" aria-label="开场时间"><span id="status" aria-live="polite">餐车行驶</span></div>
+<small>动效预览，尚未接入游戏。溶解终点是使用现有游戏素材搭建的首屏布局示意。</small>
+</main>
+<script>
+const $=id=>document.getElementById(id), svgNS='http://www.w3.org/2000/svg';
+const door=$('door'),title=$('title'),bob=$('bob'),world=$('world'),frame=$('frame'),start=$('start'),scrub=$('scrub'),status=$('status'),blackCover=$('blackCover'),dissolvePixels=$('dissolvePixels');
+const INTRO=3600, EXIT=2200, TOTAL=INTRO+EXIT;
+const travel={scenery:95,roadside:165,road:290};
+const titleMotion={start:2.8,duration:.22,fromX:-375,burstProgress:.75};
+titleMotion.land=titleMotion.start+titleMotion.duration;
+// Invert cubic ease-out: trigger at 75% of distance, not elapsed time.
+titleMotion.burstAt=titleMotion.start+titleMotion.duration*(1-Math.cbrt(1-titleMotion.burstProgress));
+titleMotion.burstOffset=titleMotion.fromX*(1-titleMotion.burstProgress);
+// Clockwise travel for a right-facing truck; wheel art shares the body bounce.
+const wheelDegreesPerSecond=travel.road/(27*.9)*180/Math.PI;
+// Measured opening bounds in the new 1620×971 source, with a 1px bleed.
+const hatch={x:142/1620*400,y:117/971*240,width:928/1620*400,height:523/971*240};
+for(const [key,value] of Object.entries(hatch))$('mountedMenu').setAttribute(key,value);
+const mount={x:20+.9*hatch.x,y:12+.9*hatch.y,width:.9*hatch.width,height:.9*hatch.height};
+const clamp=t=>Math.max(0,Math.min(1,t)), ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2, out=t=>1-Math.pow(1-t,3);
+const bayer=[[0,48,12,60,3,51,15,63],[32,16,44,28,35,19,47,31],[8,56,4,52,11,59,7,55],[40,24,36,20,43,27,39,23],[2,50,14,62,1,49,13,61],[34,18,46,30,33,17,45,29],[10,58,6,54,9,57,5,53],[42,26,38,22,41,25,37,21]];
+const masks=Array.from({length:65},(_,step)=>bayer.flatMap((row,y)=>row.map((n,x)=>n>=step?`M${x} ${y}h1v1h-1z`:'')).join(''));
+// The road and fixed particle pool are built once; all motion reuses these nodes.
+for(let i=-8;i<16;i++){
+ const dash=document.createElementNS(svgNS,'path');dash.setAttribute('d',`M${i*44} 227h23v2h-23z M${i*44+15} 237h3v1h-3z`);$('roadMarks').append(dash);
+}
+for(let i=-6;i<10;i++){
+ const post=document.createElementNS(svgNS,'path');const x=i*120;
+ post.setAttribute('d',`M${x} 211V105m-3 0h6m-3 0v-5 M${x+12} 192h86 M${x+12} 201h86`);$('roadside').append(post);
+}
+// Emit across RUSH at its actual position when the title travels 75% of the way.
+const dust=Array.from({length:48},(_,i)=>{
+ const node=document.createElementNS(svgNS,'rect');$('particles').append(node);
+ return {node,birth:titleMotion.burstAt,life:1.05+(i%6)*.07,
+   width:i%4===0?12:6,height:i%3===0?6:3,
+   x:190+(i%8)*21+(i*7)%9+titleMotion.burstOffset,y:14+Math.floor(i/8)*8,
+   dx:65+(i*29)%51-titleMotion.burstOffset,dy:-24+(i*19)%59};
+});
+let raf=0, running=false, state='intro', time=0, idleTime=0, lastNow=0, lastStep=-1;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+function render(ms, idle=0){
+ time=Math.max(0,Math.min(TOTAL,ms)); const t=time/1000, exitT=Math.max(0,(time-INTRO)/1000), exiting=time>INTRO;
+ const z=ease(clamp((t-1.3)/1.4));
+ const scaleX=1+(400/mount.width-1)*z,scaleY=1+(240/mount.height-1)*z;
+ const tx=-mount.x*(400/mount.width)*z,ty=-mount.y*(240/mount.height)*z;
+ world.setAttribute('transform',`translate(${tx} ${ty}) scale(${scaleX} ${scaleY})`);
+ const travelTime=reduced.matches?0:t+idle;
+ const wheelAngle=(travelTime*wheelDegreesPerSecond)%360;
+ $('rearWheel').setAttribute('transform',`rotate(${wheelAngle} 91.6 197.4)`);
+ $('frontWheel').setAttribute('transform',`rotate(${wheelAngle} 325.1 197.4)`);
+ $('sceneryPattern').setAttribute('patternTransform',`translate(${-Math.floor(travelTime*travel.scenery)%640} 0)`);
+ $('roadside').setAttribute('transform',`translate(${-Math.floor(travelTime*travel.roadside)%120} 0)`);
+ $('roadMarks').setAttribute('transform',`translate(${-Math.floor(travelTime*travel.road)%44} 0)`);
+ const settle=exiting?1-clamp(exitT/.14):1;
+ const vehicleY=reduced.matches?0:Math.round((Math.sin((t+idle)*8.4)*1.7+Math.sin((t+idle)*17.1)*.55)*settle);
+ // Compensate for the zoom so whole-vehicle shake stays within 2 screen pixels.
+ $('vehicleBounce').setAttribute('transform',`translate(0 ${vehicleY/scaleY})`);
+ const bounce=reduced.matches?0:Math.round((Math.sin((t+idle)*7.2)*.6+Math.sin((t+idle)*12.7)*.25)*clamp((t-1.6)/1));
+ const bounceExit=exiting?1-clamp(exitT/.14):1;
+ bob.setAttribute('transform',`translate(0 ${Math.round(bounce*bounceExit)})`);
+ const titleProgress=out(clamp((t-titleMotion.start)/titleMotion.duration));
+ title.setAttribute('transform',`translate(${Math.round(titleMotion.fromX*(1-titleProgress))} 0)`);
+ title.style.visibility=t<titleMotion.start?'hidden':'visible';
+ for(const d of dust){
+  const age=t+idle-d.birth,visible=age>=0&&age<d.life&&!exiting;
+  d.node.style.display=visible?'':'none';
+  if(visible){
+   const progress=clamp(age/d.life),travelProgress=out(progress);
+   // Ease-out interpolation approaches a fixed endpoint with zero final speed.
+   // Shrink only in the final third, preserving solid monochrome pixels.
+   const size=1-ease(clamp((progress-.65)/.35));
+   const width=Math.max(1,Math.round(d.width*size)),height=Math.max(1,Math.round(d.height*size));
+   d.node.setAttribute('x',Math.round(d.x+d.dx*travelProgress+(d.width-width)/2));
+   d.node.setAttribute('y',Math.round(d.y+d.dy*travelProgress+(d.height-height)/2));
+   d.node.setAttribute('width',width);d.node.setAttribute('height',height);
+  }
+ }
+ const lift=ease(clamp((exitT-.14)/1.12));
+ const rattle=exiting&&exitT<.14?Math.round(Math.sin(exitT*125)*1.3):0;
+ door.setAttribute('transform',`translate(${rattle} ${Math.round(-246*lift)})`);
+ frame.style.visibility=exitT>=1.3?'hidden':'visible';
+ const step=Math.floor(64*clamp((exitT-1.5)/.7));
+ if(step!==lastStep){dissolvePixels.setAttribute('d',masks[step]);lastStep=step;}
+ blackCover.style.visibility=step===64?'hidden':'visible';
+ start.style.visibility=time===INTRO?'visible':'hidden';scrub.value=time;
+ const label=t<1.3?'餐车行驶':t<2.7?'对准卷帘':t<titleMotion.burstAt?'标题快速滑入':t<3.6?'滑入 75% · 甩出颗粒':!exiting?'等待按 A':exitT<.14?'门板震动':exitT<1.26?'升起卷帘':exitT<1.5?'黑场停顿':time<TOTAL?'点阵溶解':'游戏首屏示意';
+ if(status.textContent!==label)status.textContent=label;
+}
+function stop(){cancelAnimationFrame(raf);running=false;}
+function loop(now){
+ if(!running)return;
+ const dt=Math.min(100,Math.max(0,now-lastNow));lastNow=now;
+ if(state==='intro'){render(Math.min(INTRO,time+dt));if(time===INTRO)state='menu';}
+ else if(state==='menu'){idleTime+=dt/1000;render(INTRO,idleTime);}
+ else if(state==='exit'){render(Math.min(TOTAL,time+dt));if(time===TOTAL){state='done';running=false;}}
+ if(running)raf=requestAnimationFrame(loop);
+}
+function resume(){if(running||state==='done')return;running=true;lastNow=performance.now();raf=requestAnimationFrame(loop);}
+function begin(){
+ if(state!=='menu')return;
+ if(reduced.matches){stop();state='done';render(TOTAL);return;}
+ state='exit';time=INTRO+.01;resume();
+}
+function restart(){stop();idleTime=0;state=reduced.matches?'menu':'intro';render(reduced.matches?INTRO:0);resume();}
+function seek(ms){stop();idleTime=0;render(ms);state=ms<INTRO?'intro':ms===INTRO?'menu':ms<TOTAL?'exit':'done';}
+$('screen').addEventListener('click',begin);
+$('screen').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();begin();}});
+document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='a'&&!e.repeat){e.preventDefault();begin();}});
+$('reset').addEventListener('click',restart);scrub.addEventListener('input',()=>seek(Number(scrub.value)));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else resume();});
+window.preview={render:seek,stop,run:begin,restart,get time(){return time;},get playing(){return running;},get state(){return state;}};
+restart();
+</script>
+</html>

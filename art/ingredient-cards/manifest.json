@@ -1,0 +1,91 @@
+{
+  "size": [
+    92,
+    48
+  ],
+  "artCrop": "left half of visible subject, aspect-preserving, vertically centered",
+  "artFadeStartFraction": 0.25,
+  "selectedStyle": "thicker border, black mnemonic on white",
+  "cards": [
+    {
+      "code": "P",
+      "abbreviation": "P",
+      "name": "PATTY",
+      "icon": "Patty",
+      "normalFrame": 1,
+      "selectedFrame": 2
+    },
+    {
+      "code": "O",
+      "abbreviation": "O",
+      "name": "ONION",
+      "icon": "Onion",
+      "normalFrame": 3,
+      "selectedFrame": 4
+    },
+    {
+      "code": "T",
+      "abbreviation": "T",
+      "name": "TOMATO",
+      "icon": "Tomato",
+      "normalFrame": 5,
+      "selectedFrame": 6
+    },
+    {
+      "code": "L",
+      "abbreviation": "L",
+      "name": "LETTUCE",
+      "icon": "Lettuce",
+      "normalFrame": 7,
+      "selectedFrame": 8
+    },
+    {
+      "code": "K",
+      "abbreviation": "PK",
+      "name": "PICKLE",
+      "icon": "Pickle",
+      "normalFrame": 9,
+      "selectedFrame": 10
+    },
+    {
+      "code": "E",
+      "abbreviation": "E",
+      "name": "EGG",
+      "icon": "Egg",
+      "normalFrame": 11,
+      "selectedFrame": 12
+    },
+    {
+      "code": "M",
+      "abbreviation": "M",
+      "name": "MUSHROOM",
+      "icon": "Mushroom",
+      "normalFrame": 13,
+      "selectedFrame": 14
+    },
+    {
+      "code": "B",
+      "abbreviation": "B",
+      "name": "BACON",
+      "icon": "Bacon",
+      "normalFrame": 15,
+      "selectedFrame": 16
+    },
+    {
+      "code": "A",
+      "abbreviation": "A.C.",
+      "name": "AMERICAN CHEESE",
+      "icon": "American",
+      "normalFrame": 17,
+      "selectedFrame": 18
+    },
+    {
+      "code": "S",
+      "abbreviation": "E.C.",
+      "name": "ENGLISH CHEESE",
+      "icon": "English",
+      "normalFrame": 19,
+      "selectedFrame": 20
+    }
+  ]
+}

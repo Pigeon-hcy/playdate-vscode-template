@@ -1,0 +1,26 @@
+{
+  "tool": "Built-in image_gen",
+  "version": "truck-v6",
+  "assets": [
+    {
+      "file": "truck-style-master.png",
+      "prompt": "Use case: stylized-concept\nAsset type: side-view food truck sprite, drawn in the SAME 1-BIT GAME ART STYLE as the attached patty and hand-cranked grinder. Landscape 5:3 composition.\nCreate a NEW burger food truck with a taller boxy cargo body and compact cab facing RIGHT, viewed strictly from the service side, not 3/4. Exactly two wheels in side profile. A coarse black and white early-Macintosh / Playdate bitmap print, chunky slightly jagged pixel contour edges, bold broken black shadows, visibly patterned large clustered dithering across the metal and tires. The references' chunky material shading is the style authority. Natural believable object proportions, but simplified heavy silhouettes. This must look like a game prop from the same world as the grinder, NOT a fine-line vehicle blueprint, vector clipart, pristine white van with a few scratches, cartoon, smooth grayscale or glossy render.\nThe cargo box must be TALL so it can carry an ENORMOUS wide rectangular roll-up service shutter. This single opening fills almost the ENTIRE cargo side, about 85%-90% of its width and height, with only a NARROW body margin and ONE thin black outer rim. Not a little window centered on a large blank wall. Opening interior is plain pure white; slats and graffiti will be composited separately. No nested inset frame, double window, side filler panels, counter ledge or thick border inside this opening.\nUse this concrete layout on a 1600x960-like landscape canvas: truck cargo body about x90..1110 and y100..725. Huge service opening approximately x145..1055 and y150..695 (about 5:3 width:height). Cab attached at right x1110..1515 and y270..740, cab roof lower than the tall cargo box. Two big textured wheels centered around x360 and x1320, y780, ending around y885. Keep a small safe white margin all around. One dark cab window, a short angled nose, compact bumper, modest roof vent. The new overall silhouette may differ from the earlier truck; matching the chunky GAME SPRITE ART and oversized opening matters most.\nUse substantial black and stippled midtone masses on the cab, lower chassis, shaded side edges, and tires; white highlights. Patterned shading should be as obvious as in the reference patty/grinder, not just scattered dirt. The shutter placeholder stays flat white for clean compositing.\nPlain PURE WHITE background outside the vehicle, no scenery, road, shadows beyond the outline, food, graffiti, text, title, logos, signs, people or driver. Entire vehicle visible. Black-and-white only. No soft gradient, anti-aliased fine linework or paper gray. Coarse controlled ink pixels. Standalone asset, not a device mockup."
+    },
+    {
+      "file": "truck-large-shutter.png",
+      "prompt": "Use case: precise-object-edit\nEdit the attached coarse 1-bit pixel-art food truck. Preserve this exact successful visual style: chunky pixel edges, bold black areas and visible checker/dot material shading. Keep the cab, wheels, chassis, vehicle orientation and horizontal position unchanged.\nMake ONE geometry correction: the big white shutter opening is still too wide and short. Its width must remain almost unchanged, but extend it UPWARDS substantially by raising the cargo roof. The finished INNER white opening must be a true 5:3 landscape rectangle, not a panoramic 2.2:1 rectangle.\nOn the approximately 1619x971 image: keep inner opening LEFT around x145, RIGHT around x1070, BOTTOM around y642. Move its TOP UP to about y87. Width925, height555: EXACT 5:3 ratio. Raise the flat cargo roof to about y45 and fill the new cargo-body border area with the same coarse stipple and black outline. Remove the small roof vent to make room; leave at least 35 white pixels above the new flat roof. Keep the lower edge, tires, cab and chassis in their original locations.\nThere must be only ONE thin dark outline around the HUGE WHITE opening; no nested frame, side panels, divider bars, signs, text or graffiti in it. It fills nearly the entire taller cargo box side. Do not shrink the window's width, do not change the whole image aspect ratio, and do not stretch the wheels or cab. Only extend the cargo box and its opening upwards. White opening perfectly empty for later animation compositing. Outside vehicle stays pure white. No new road, scenery or additional objects."
+    }
+  ],
+  "references": [
+    "../ingredient-cards/generated/Patty.png",
+    "source/resource/GrinderBody.png"
+  ],
+  "openingPixels": {
+    "x": 142,
+    "y": 117,
+    "width": 928,
+    "height": 523,
+    "sourceWidth": 1620,
+    "sourceHeight": 971
+  }
+}

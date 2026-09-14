@@ -17,6 +17,13 @@ from PIL import Image
 SOURCE = os.path.expanduser("~/Documents/Arts/playdate")
 OUTPUT = "source/resource/ingredients"
 
+# Per-sprite enlargement, applied before dithering so the pattern stays clean.
+# The top bun is drawn narrower than the bottom bun in the source art; scale
+# it so both buns come out the same width on screen.
+SCALE = {
+    "TopBread.png": 1.14,
+}
+
 # Bayer 8x8: screen-aligned inside each sprite, so flat greys resolve to clean
 # regular patterns rather than noise.
 BAYER = [
@@ -34,9 +41,17 @@ def disk(radius):
             if dx * dx + dy * dy <= radius * radius]
 
 
-def build(path, width, height, outline):
+def build(path, width, height, outline, scale=1.0):
+    # Enlarge on a wider canvas, then crop back to the target width about the
+    # canvas centre so the artist's horizontal placement is kept, scaled.
+    build_width = round(width * scale)
+    build_height = round(height * scale)
     image = Image.open(path).convert("RGBA").resize(
-        (width, height), Image.BICUBIC)
+        (build_width, build_height), Image.BICUBIC)
+    if build_width != width:
+        left = (build_width - width) // 2
+        image = image.crop((left, 0, left + width, build_height))
+    width, height = image.size
     pixels = image.load()
 
     solid = [[False] * width for _ in range(height)]
@@ -103,7 +118,8 @@ def main():
         path = os.path.join(args.source, name)
         source_width, source_height = Image.open(path).size
         height = round(args.width * source_height / source_width)
-        sprite = build(path, args.width, height, args.outline)
+        sprite = build(path, args.width, height, args.outline,
+                       SCALE.get(name, 1.0))
         sprite.save(os.path.join(args.output, name))
         tallest = max(tallest, sprite.height)
         print(f"  {name:<14} {sprite.width}x{sprite.height}")

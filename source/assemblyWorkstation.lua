@@ -1,53 +1,108 @@
 import "CoreLibs/graphics"
 import "CoreLibs/crank"
 import "playerConfig"
+import "supplyWarning"
 import "juicy"
 import "juiceRuntime"
+import "orderRuntime"
+import "ingredientCardWheel"
 
 local pd <const> = playdate
 local gfx <const> = playdate.graphics
 local assembly <const> = PlayerConfig.assembly
 
-local recipePanelRight <const> = 104
-local ingredientPanelLeft <const> = 302
--- Sprites are trimmed to their drawn content and stacked by their bottom
--- edge; each layer then rises by the thickness of the one below it, so the
--- burger packs as tightly as the art allows.
+-- Leave a narrow gutter for the fixed workstation direction keys.
+local recipeLeft <const> = 24
+local recipePanelRight <const> = 120
+local ingredientPanelLeft <const> = 286
+-- Fillings are centred on their visible footprint, then placed using their
+-- calibrated contact offset and thickness. Canvas padding is not a contact
+-- point, and the bottom bun's support surface must never be compressed.
 local stackCenterX <const> = 203
 local stackBottom <const> = 204
-local compactStackTop <const> = 8
-local recipeListStartY <const> = 52
+local compactStackTop <const> = 44
+local recipeListStartY <const> = 64
 local recipeListLastY <const> = 190
 
-local wheelCardRight <const> = 396
+local wheelCardRight <const> = 380
 local wheelCenterY <const> = 116
-local wheelSpacing <const> = 39
--- Cards hang off a shared right edge and only stretch in length: longest at
--- the centre, shortest at the ends. Resizing both axes meant re-laying out
--- every frame, and the outline needs no fill -- nothing is drawn behind this
--- panel for it to mask.
-local cardHeight <const> = 34
-local activeCardWidth <const> = 96
-local cardWidthFalloff <const> = 17
-local minCardWidth <const> = 46
-local wheelClipY <const> = 24
-local wheelClipHeight <const> = 184
+-- Fixed-size cards preserve the large mnemonic, icon, and complete name on
+-- neighboring items. Selection is baked into a separate high-contrast state.
+local activeCardWidth <const> = assembly.ingredientCards.width
+-- Three complete cards at rest; incoming neighbors clip only while turning.
+local wheelClipY <const> = 34
+local wheelClipHeight <const> = 164
 
 local systemFont <const> = gfx.getSystemFont()
 local smallFont <const> =
     gfx.font.new("/System/Fonts/Roobert-10-Bold") or systemFont
 
 local grayTextImages = {}
+local recipeTitleImages = {}
+local recipeTitleWidth <const> = recipePanelRight - recipeLeft - 4
+local function getRecipeTitleImage(name)
+    local image = recipeTitleImages[name]
+    if image == nil then
+        -- Two lines of the smaller font keep complete current recipe names
+        -- within the left column. Future longer names truncate inside it.
+        image = gfx.imageWithText(name, recipeTitleWidth, 32, gfx.kColorClear,
+            0, "...", nil, smallFont)
+        recipeTitleImages[name] = image
+    end
+    return image
+end
+for _, recipe in ipairs(PlayerConfig.recipe) do getRecipeTitleImage(recipe[1]) end
 
 local spriteDirectory <const> = "resource/ingredients/"
 
 local spriteWidth = 0
 local maxSpriteHeight = 0
 
-local function loadSprite(name)
+local function visibleBounds(image)
+    local width, height = image:getSize()
+    local left, top, right, bottom = width, height, 0, 0
+    for y = 0, height - 1 do
+        for x = 0, width - 1 do
+            if image:sample(x, y) ~= gfx.kColorClear then
+                left, top = math.min(left, x), math.min(top, y)
+                right, bottom = math.max(right, x + 1), math.max(bottom, y + 1)
+            end
+        end
+    end
+    assert(right > left and bottom > top, "assembly sprite must have visible content")
+    return left, top, right, bottom
+end
+
+local function loadSprite(name, ingredientCode)
     local image, loadError = gfx.image.new(spriteDirectory .. name)
     assert(image, loadError)
 
+    if ingredientCode ~= nil and not assembly.spriteNaturalOverhang[ingredientCode] then
+        local left, _, right = visibleBounds(image)
+        local width, height = image:getSize()
+        local scaleX = math.min(1, assembly.spriteFootprintWidth / (right - left))
+        local scaleY = math.min(scaleX, assembly.spriteMaxHeights[ingredientCode] / height)
+        if scaleX < 1 or scaleY < 1 then
+            -- Bake once, keeping the game's binary black/white pixels and
+            -- alpha. No runtime resizing or changes to the shared source art.
+            local fitted = gfx.image.new(math.floor(width * scaleX + .5),
+                math.floor(height * scaleY + .5), gfx.kColorClear)
+            local fittedWidth, fittedHeight = fitted:getSize()
+            gfx.pushContext(fitted)
+            image:drawScaled(0, 0, fittedWidth / width, fittedHeight / height)
+            gfx.popContext()
+            image = fitted
+        end
+    end
+
+    -- Tight bounds put the actual silhouette at the centre in either flip.
+    -- The old 160px canvases had different left/right padding for every food.
+    local left, top, right, bottom = visibleBounds(image)
+    local centred = gfx.image.new(right - left, bottom - top, gfx.kColorClear)
+    gfx.pushContext(centred)
+    image:draw(-left, -top)
+    gfx.popContext()
+    image = centred
     local width, height = image:getSize()
     spriteWidth = math.max(spriteWidth, width)
     maxSpriteHeight = math.max(maxSpriteHeight, height)
@@ -58,7 +113,7 @@ end
 local ingredientImages <const> = {}
 
 for ingredientCode, spriteName in pairs(assembly.ingredientSprites) do
-    ingredientImages[ingredientCode] = loadSprite(spriteName)
+    ingredientImages[ingredientCode] = loadSprite(spriteName, ingredientCode)
 end
 
 local bottomBreadImage <const> = loadSprite(assembly.breadSprites.bottom)
@@ -83,27 +138,43 @@ for ingredientCode, image in pairs(ingredientImages) do
     flippedIngredientImages[ingredientCode] = makeFlippedSprite(image)
 end
 
--- Wheel labels never change, so lay each one out once instead of running
--- drawTextInRect for every visible card on every frame.
-local ingredientLabelImages <const> = {}
-
-for _, ingredientCode in ipairs(assembly.ingredientCodes) do
-    ingredientLabelImages[ingredientCode] = gfx.imageWithText(
-        assembly.ingredientNames[ingredientCode],
-        activeCardWidth,
-        cardHeight,
-        nil,
-        nil,
-        nil,
-        nil,
-        smallFont
-    )
-end
+local ingredientWheel <const> = IngredientCardWheel.new(assembly, {
+    right = wheelCardRight,
+    centerY = wheelCenterY,
+    clipY = wheelClipY,
+    clipHeight = wheelClipHeight,
+    titleX = ingredientPanelLeft + 8,
+    titleY = 7,
+}, systemFont)
 
 AssemblyWorkstation = {}
 AssemblyWorkstation.usesCrank = true
+-- Shown on the controls card; keep in step with handleInput and update.
+AssemblyWorkstation.help = {
+    title = "ASSEMBLY",
+    summary = "BUILD THE RECIPE ON THE LEFT: EXACT COUNTS, ANY ORDER. SERVE IT BEFORE A TICKET RUNS OUT.",
+    controls = {
+        { "🎣", "TURN TO PICK AN ITEM" },
+        { "Ⓐ ⬇", "ADD THE PICKED ITEM" },
+        { "⬆", "PUT THE TOP BUN ON" },
+        { "⬆", "SERVE THE FINISHED BURGER" },
+    },
+}
 local juice <const> = Juice
 local completionPending = false
+local servePhase = nil
+local serveStartTime = 0
+local serveOffsetY = 0
+local _, bottomBreadHeight = bottomBreadImage:getSize()
+local breadEntryDistance <const> = PlayerConfig.screenHeight + bottomBreadHeight + 4 - stackBottom
+
+function AssemblyWorkstation.isServing()
+    return servePhase ~= nil
+end
+
+function AssemblyWorkstation.getServeOffsetY()
+    return serveOffsetY
+end
 
 -- Retire only the ids this workstation owns: the shared instance also
 -- carries the other workstations' effects, so Juicy:clear would wipe them.
@@ -169,12 +240,13 @@ function AssemblyWorkstation.isBurgerCorrect(
 end
 
 function AssemblyWorkstation.addIngredient(ingredientCode)
-    if assembly.hasTopBread then
+    if assembly.hasTopBread or servePhase ~= nil then
         return false
     end
 
     if ingredientCode == "P" then
         if PlayerConfig.patties <= 0 then
+            SupplyWarning.request("patty")
             return false
         end
 
@@ -205,6 +277,8 @@ end
 function AssemblyWorkstation.initialize()
     clearBurgerJuice()
     completionPending = false
+    servePhase = nil
+    serveOffsetY = 0
     assembly.layers = {}
     assembly.layerRepeats = {}
     assembly.hasTopBread = false
@@ -216,6 +290,15 @@ function AssemblyWorkstation.initialize()
 end
 
 function AssemblyWorkstation.serveBurger()
+    if servePhase ~= nil or completionPending or not assembly.hasTopBread or
+        Orders:count() == 0 then
+        return nil
+    end
+
+    -- Any served burger consumes the order nearest its deadline.
+    local order = Orders:completeNext()
+    if order == nil then return nil end
+
     clearBurgerJuice()
     completionPending = false
     local currentRecipe = PlayerConfig.recipe[assembly.currentRecipeIndex]
@@ -226,16 +309,18 @@ function AssemblyWorkstation.serveBurger()
     )
 
     if isCorrect then
-        PlayerConfig.score += 1
-        assembly.lastResult = "CORRECT"
+        local points = Scoring.awardBurger(assembly.layers,
+            order.expiresAt - Orders.time, Orders:isRushHour())
+        assembly.lastResult = "CORRECT +" .. points
     else
-        assembly.lastResult = "WRONG"
+        assembly.lastResult = "WRONG -" .. Scoring.penalizeWrong()
     end
 
-    assembly.layers = {}
-    assembly.layerRepeats = {}
-    assembly.hasTopBread = false
-    AssemblyWorkstation.selectRandomRecipe()
+    -- Keep the full stack and its recipe until it has left the screen.
+    -- One shared draw offset moves every layer without altering its layout.
+    servePhase = "outgoing"
+    serveStartTime = juice.time
+    serveOffsetY = 0
 
     return isCorrect
 end
@@ -251,7 +336,7 @@ function AssemblyWorkstation.selectIngredient(crankTicks)
 end
 
 function AssemblyWorkstation.startWheelTurn(direction)
-    if assembly.wheelIsAnimating or direction == 0 then
+    if servePhase ~= nil or assembly.wheelIsAnimating or direction == 0 then
         return false
     end
 
@@ -280,7 +365,7 @@ function AssemblyWorkstation.advanceWheelAnimation()
 end
 
 function AssemblyWorkstation.pressUp()
-    if completionPending then return "animating" end
+    if completionPending or servePhase ~= nil then return "animating" end
     if not assembly.hasTopBread then
         assembly.hasTopBread = true
         local index = #assembly.layers + 1
@@ -296,6 +381,11 @@ function AssemblyWorkstation.pressUp()
         return "closed"
     end
 
+    if Orders:count() == 0 then
+        juice:errorShake("error")
+        return "no_order"
+    end
+
     if AssemblyWorkstation.serveBurger() then
         return "correct"
     end
@@ -304,6 +394,7 @@ function AssemblyWorkstation.pressUp()
 end
 
 function AssemblyWorkstation.handleInput()
+    if servePhase ~= nil then return end
     if pd.buttonJustPressed(pd.kButtonB) then juice:errorShake("error") end
     if (pd.buttonJustPressed(pd.kButtonDown) or pd.buttonJustPressed(pd.kButtonA)) and
         not assembly.wheelIsAnimating then
@@ -319,7 +410,47 @@ function AssemblyWorkstation.handleInput()
     end
 end
 
+local function updateServing()
+    if servePhase == nil then return end
+
+    local elapsed = juice.time - serveStartTime
+    if servePhase == "outgoing" then
+        if elapsed < assembly.serveOutDuration then
+            local progress = elapsed / assembly.serveOutDuration
+            serveOffsetY = -(stackBottom + 8) * progress * progress
+            return
+        end
+
+        clearBurgerJuice()
+        assembly.layers = {}
+        assembly.layerRepeats = {}
+        assembly.hasTopBread = false
+        AssemblyWorkstation.selectRandomRecipe()
+        servePhase = "incoming"
+        serveStartTime += assembly.serveOutDuration
+        elapsed = juice.time - serveStartTime
+    end
+
+    if elapsed >= assembly.breadInDuration then
+        servePhase = nil
+        serveOffsetY = 0
+    else
+        local progress = elapsed / assembly.breadInDuration
+        serveOffsetY = breadEntryDistance * (1 - progress) ^ 3
+    end
+end
+
 function AssemblyWorkstation.update(isActive)
+    updateServing()
+    if servePhase ~= nil then
+        if assembly.wheelIsAnimating then
+            AssemblyWorkstation.advanceWheelAnimation()
+        end
+        -- Ignore crank movement made while the new bun is not ready.
+        if isActive then pd.getCrankTicks(assembly.crankTicksPerTurn) end
+        return
+    end
+
     if assembly.wheelIsAnimating then
         AssemblyWorkstation.advanceWheelAnimation()
         return
@@ -395,17 +526,17 @@ function AssemblyWorkstation.getRecipeLineSpacing(requirementCount)
     )
 end
 
--- Sprites are drawn 1:1 so their dither stays crisp. A recipe too tall for
--- the panel shrinks every step by one shared factor, computed from the recipe
--- rather than the layers placed so far so nothing shifts mid-build.
+-- Prepared sprites draw 1:1. Tall recipes compress ingredient spacing only;
+-- the bun's support surface stays fixed, even when a later recipe is taller.
 function AssemblyWorkstation.getStackLayout(recipe)
-    local required = assembly.breadThickness.bottom
+    local required = 0
 
     for recipeIndex = 2, #recipe do
         required += assembly.spriteThickness[recipe[recipeIndex]] or 0
     end
 
-    local available = stackBottom - compactStackTop - maxSpriteHeight
+    local available = stackBottom - compactStackTop - maxSpriteHeight -
+        assembly.breadThickness.bottom
     local scale = 1
 
     if required > available and required > 0 then
@@ -421,7 +552,7 @@ function AssemblyWorkstation.getTopLayerBottom()
     local _, scale, bottom =
         AssemblyWorkstation.getStackLayout(currentRecipe)
 
-    bottom -= assembly.breadThickness.bottom * scale
+    bottom -= assembly.breadThickness.bottom
 
     for _, ingredientCode in ipairs(assembly.layers) do
         bottom -= (assembly.spriteThickness[ingredientCode] or 0) * scale
@@ -431,12 +562,20 @@ function AssemblyWorkstation.getTopLayerBottom()
 end
 
 local function drawRecipe()
+    if Orders:count() == 0 then
+        gfx.setFont(smallFont)
+        gfx.drawText("NO ORDERS!", recipeLeft, 52)
+        gfx.setFont(systemFont)
+        return
+    end
+
     local currentRecipe = PlayerConfig.recipe[assembly.currentRecipeIndex]
     local order, requiredCounts = getRecipeRequirements(currentRecipe)
     local addedCounts = countIngredients(assembly.layers, 1)
 
-    gfx.drawText("RECIPE", 8, 7)
-    gfx.drawText(currentRecipe[1], 8, 28)
+    gfx.drawText("RECIPE", recipeLeft, 7)
+    local titleImage = getRecipeTitleImage(currentRecipe[1])
+    if titleImage then titleImage:draw(recipeLeft, 28) end
     gfx.setFont(smallFont)
 
     local lineSpacing =
@@ -456,9 +595,9 @@ local function drawRecipe()
             (addedCounts[ingredientCode] or 0) >= requiredCount
 
         if requirementIsMet then
-            drawGrayText(text, 8, y)
+            drawGrayText(text, recipeLeft, y)
         else
-            gfx.drawText(text, 8, y)
+            gfx.drawText(text, recipeLeft, y)
         end
     end
 
@@ -490,7 +629,7 @@ local function drawLayer(image, bottom, seat, rotation, id)
     )
     local drawY = math.floor(
         stackedBottom - drawHeight + seat * scaleY +
-            t.offsetY + group.offsetY + shakeY + .5
+            t.offsetY + group.offsetY + shakeY + serveOffsetY + .5
     )
 
     local oldMode = gfx.getImageDrawMode()
@@ -530,7 +669,7 @@ local function drawBurger()
         0,
         0
     )
-    bottom -= assembly.breadThickness.bottom * scale
+    bottom -= assembly.breadThickness.bottom
 
     for layerIndex, ingredientCode in ipairs(assembly.layers) do
         local variant = assembly.repeatVariants[
@@ -561,108 +700,18 @@ local function drawBurger()
     end
 end
 
-local function getWrappedIngredient(relativeIndex)
-    local ingredientCount = #assembly.ingredientCodes
-    local index = ((assembly.selectedIngredientIndex - 1 +
-        relativeIndex) % ingredientCount) + 1
-    return assembly.ingredientCodes[index]
-end
-
 function AssemblyWorkstation.getWheelCardWidth(position)
-    return math.max(
-        minCardWidth,
-        activeCardWidth - math.abs(position) * cardWidthFalloff
-    )
-end
-
-local function drawWheelCard(ingredientCode, position)
-    local width = AssemblyWorkstation.getWheelCardWidth(position)
-    local x = math.floor(wheelCardRight - width)
-    local y = math.floor(
-        wheelCenterY + position * wheelSpacing - cardHeight / 2
-    )
-
-    gfx.setColor(gfx.kColorBlack)
-    gfx.setLineWidth(math.abs(position) < 0.5 and 3 or 1)
-    gfx.drawRect(x, y, width, cardHeight)
-
-    local label = ingredientLabelImages[ingredientCode]
-
-    if label == nil then
-        return
-    end
-
-    -- Clip to the card, kept inside the panel, so a long name truncates
-    -- rather than spilling over the border.
-    local clipTop = math.max(y, wheelClipY)
-    local clipBottom = math.min(y + cardHeight, wheelClipY + wheelClipHeight)
-
-    if clipBottom <= clipTop then
-        return
-    end
-
-    local labelWidth, labelHeight = label:getSize()
-    gfx.setClipRect(x + 5, clipTop, width - 10, clipBottom - clipTop)
-    label:draw(
-        math.floor(x + (width - labelWidth) / 2),
-        math.floor(y + (cardHeight - labelHeight) / 2)
-    )
+    return activeCardWidth
 end
 
 local function drawIngredientWheel()
-    gfx.drawText("ITEMS", ingredientPanelLeft + 8, 7)
-
-    local panelWidth =
-        PlayerConfig.screenWidth - ingredientPanelLeft - 1
-    local animationProgress = 0
-
-    if assembly.wheelIsAnimating then
-        animationProgress = assembly.wheelAnimationFrame /
-            assembly.wheelAnimationDurationFrames
-        animationProgress = animationProgress * animationProgress *
-            (3 - 2 * animationProgress)
-    end
-
-    local positionOffset =
-        -assembly.wheelDirection * animationProgress
-
-    for relativeIndex = -3, 3 do
-        local position = relativeIndex + positionOffset
-        local y = wheelCenterY + position * wheelSpacing
-
-        -- Skip the cards the panel would clip away entirely.
-        if y + cardHeight / 2 > wheelClipY and
-            y - cardHeight / 2 < wheelClipY + wheelClipHeight then
-            gfx.setClipRect(
-                ingredientPanelLeft + 1,
-                wheelClipY,
-                panelWidth,
-                wheelClipHeight
-            )
-            drawWheelCard(
-                getWrappedIngredient(relativeIndex),
-                position
-            )
-        end
-    end
-
-    gfx.clearClipRect()
+    ingredientWheel:draw()
 end
 
 local function drawInventoryStatus()
-    local currentRecipe =
-        PlayerConfig.recipe[assembly.currentRecipeIndex]
-
-    if #currentRecipe - 1 > 4 then
-        gfx.setFont(smallFont)
-        gfx.drawText("SCORE: " .. PlayerConfig.score, 110, 7)
-        gfx.drawText("PATTY: " .. PlayerConfig.patties, 250, 7)
-        gfx.setFont(systemFont)
-        return
-    end
-
-    gfx.drawText("SCORE: " .. PlayerConfig.score, 112, 7)
-    gfx.drawText("PATTY: " .. PlayerConfig.patties, 213, 7)
+    gfx.setFont(smallFont)
+    gfx.drawText("SCORE: " .. PlayerConfig.score, 8, 211)
+    gfx.setFont(systemFont)
 end
 
 function AssemblyWorkstation.draw()
@@ -671,19 +720,28 @@ function AssemblyWorkstation.draw()
     gfx.drawLine(ingredientPanelLeft, 0, ingredientPanelLeft, 210)
 
     drawRecipe()
+    if servePhase ~= nil then
+        -- The stack travels behind the fixed header/footer, not over the UI.
+        gfx.setClipRect(recipePanelRight + 1, compactStackTop,
+            ingredientPanelLeft - recipePanelRight - 1, 210 - compactStackTop)
+    end
     drawBurger()
+    if servePhase ~= nil then gfx.clearClipRect() end
     juice:drawParticles()
     drawIngredientWheel()
 
     drawInventoryStatus()
 
-    if assembly.lastResult ~= nil then
-        gfx.drawText(assembly.lastResult, 167, 31)
-    end
-
-    if assembly.hasTopBread then
-        gfx.drawText("UP: SERVE", 157, 211)
+    gfx.setFont(smallFont)
+    if servePhase ~= nil then
+        gfx.drawText(servePhase == "outgoing" and "SERVING..." or "NEXT...", 130, 211)
+    elseif assembly.hasTopBread then
+        gfx.drawText(Orders:count() > 0 and "⬆  SERVE" or "WAITING FOR ORDER", 130, 211)
     else
-        gfx.drawText("A/DOWN: ADD  UP: BREAD", 110, 211)
+        gfx.drawText("🎣 PICK   Ⓐ ADD   ⬆ BUN", 130, 211)
     end
+    if assembly.lastResult ~= nil then
+        gfx.drawText(assembly.lastResult, 130, 226)
+    end
+    gfx.setFont(systemFont)
 end
