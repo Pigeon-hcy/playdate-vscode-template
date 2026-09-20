@@ -134,7 +134,8 @@ GrinderWorkstation.usesCrank = true
 -- Shown on the controls card; keep in step with handleInput and update.
 GrinderWorkstation.help = {
     title = "GRINDER",
-    summary = "RAW MEAT GOES IN, MINCE COMES OUT. THE FRYER USES 20 MINCE PER PATTY.",
+    summary = "RAW MEAT GOES IN, MINCE COMES OUT. THE FRYER USES " ..
+        PlayerConfig.frying.pattyCost .. " MINCE PER PATTY.",
     controls = {
         { "🎣", "CRANK TO GRIND THE MEAT" },
         { "⬇", "LOAD A NEW BLOCK OF MEAT" },

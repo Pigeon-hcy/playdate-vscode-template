@@ -103,11 +103,12 @@ function HelpCard.resetSeen()
     seen = {}
 end
 
-function HelpCard.show(help, number)
+function HelpCard.show(help, number, immediately)
     seen[number] = true
     card, cardWidth, cardHeight = bake(help, number)
     open = true
-    time = 0
+    -- Startup can reveal an already-settled card in its dissolve target.
+    time = immediately and cfg.enterDuration or 0
     closedAt = nil
 end
 

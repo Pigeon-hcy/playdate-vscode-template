@@ -6,6 +6,7 @@ import "assemblyWorkstation"
 
 local gfx <const> = playdate.graphics
 local cost <const> = PlayerConfig.frying.pattyCost
+assert(cost == 50, "each patty must cost 50 mince")
 local warning <const> = SupplyWarning
 PlayerConfig.activeWorkstation = 2
 PlayerConfig.mincedMeat = 0

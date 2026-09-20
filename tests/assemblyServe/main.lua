@@ -14,6 +14,25 @@ station.initialize()
 Orders:reset()
 PlayerConfig.patties = 10
 assembly.currentRecipeIndex = 1
+
+-- Assembly accepts DOWN only. A must remain free for future use.
+local originalButtonJustPressed <const> = playdate.buttonJustPressed
+local pressed = { [playdate.kButtonA] = true }
+playdate.buttonJustPressed = function(button) return pressed[button] == true end
+local pattiesBeforeInput = PlayerConfig.patties
+station.handleInput()
+assert(#assembly.layers == 0 and PlayerConfig.patties == pattiesBeforeInput,
+    "A must not place an ingredient")
+pressed = { [playdate.kButtonDown] = true }
+station.handleInput()
+assert(#assembly.layers == 1 and PlayerConfig.patties == pattiesBeforeInput - 1,
+    "DOWN must place the selected ingredient")
+playdate.buttonJustPressed = originalButtonJustPressed
+station.initialize()
+Orders:reset()
+PlayerConfig.patties = 10
+assembly.currentRecipeIndex = 1
+
 assert(station.serveBurger() == nil, "an open burger cannot be served")
 assert(station.addIngredient("P"))
 assert(station.addIngredient("A"))
@@ -26,7 +45,7 @@ local oldRecipe = assembly.currentRecipeIndex
 local oldScore = PlayerConfig.score
 local oldPatties = PlayerConfig.patties
 local points = Scoring.burgerPoints({ "P", "A" },
-    Orders.pending[1].expiresAt - Orders.time, false)
+    Orders:getRemainingTime(Orders.pending[1]), false)
 assert(station.pressUp() == "correct")
 assert(station.isServing())
 assert(PlayerConfig.score == oldScore + points)

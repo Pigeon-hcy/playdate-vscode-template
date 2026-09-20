@@ -155,7 +155,7 @@ AssemblyWorkstation.help = {
     summary = "BUILD THE RECIPE ON THE LEFT: EXACT COUNTS, ANY ORDER. SERVE IT BEFORE A TICKET RUNS OUT.",
     controls = {
         { "🎣", "TURN TO PICK AN ITEM" },
-        { "Ⓐ ⬇", "ADD THE PICKED ITEM" },
+        { "⬇", "ADD THE PICKED ITEM" },
         { "⬆", "PUT THE TOP BUN ON" },
         { "⬆", "SERVE THE FINISHED BURGER" },
     },
@@ -262,6 +262,7 @@ function AssemblyWorkstation.addIngredient(ingredientCode)
     end
 
     assembly.layers[#assembly.layers + 1] = ingredientCode
+    Orders:commitNext()
     assembly.layerRepeats[#assembly.layers] = repeatCount
     impactLayers(#assembly.layers)
     if ingredientCode == "P" then
@@ -295,7 +296,7 @@ function AssemblyWorkstation.serveBurger()
         return nil
     end
 
-    -- Any served burger consumes the order nearest its deadline.
+    -- Fulfil the promised customer's order, including an incorrect burger.
     local order = Orders:completeNext()
     if order == nil then return nil end
 
@@ -310,7 +311,7 @@ function AssemblyWorkstation.serveBurger()
 
     if isCorrect then
         local points = Scoring.awardBurger(assembly.layers,
-            order.expiresAt - Orders.time, Orders:isRushHour())
+            Orders:getRemainingTime(order), Orders:isRushHour())
         assembly.lastResult = "CORRECT +" .. points
     else
         assembly.lastResult = "WRONG -" .. Scoring.penalizeWrong()
@@ -367,6 +368,7 @@ end
 function AssemblyWorkstation.pressUp()
     if completionPending or servePhase ~= nil then return "animating" end
     if not assembly.hasTopBread then
+        Orders:commitNext()
         assembly.hasTopBread = true
         local index = #assembly.layers + 1
         impactLayers(index)
@@ -396,8 +398,7 @@ end
 function AssemblyWorkstation.handleInput()
     if servePhase ~= nil then return end
     if pd.buttonJustPressed(pd.kButtonB) then juice:errorShake("error") end
-    if (pd.buttonJustPressed(pd.kButtonDown) or pd.buttonJustPressed(pd.kButtonA)) and
-        not assembly.wheelIsAnimating then
+    if pd.buttonJustPressed(pd.kButtonDown) and not assembly.wheelIsAnimating then
         local selectedCode =
             assembly.ingredientCodes[assembly.selectedIngredientIndex]
         if not AssemblyWorkstation.addIngredient(selectedCode) then
@@ -442,6 +443,11 @@ end
 
 function AssemblyWorkstation.update(isActive)
     updateServing()
+    -- If work began while there were no orders, promise the next available
+    -- customer this burger. Keep that promise even on another workstation.
+    if servePhase == nil and (#assembly.layers > 0 or assembly.hasTopBread) then
+        Orders:commitNext()
+    end
     if servePhase ~= nil then
         if assembly.wheelIsAnimating then
             AssemblyWorkstation.advanceWheelAnimation()
@@ -738,7 +744,7 @@ function AssemblyWorkstation.draw()
     elseif assembly.hasTopBread then
         gfx.drawText(Orders:count() > 0 and "⬆  SERVE" or "WAITING FOR ORDER", 130, 211)
     else
-        gfx.drawText("🎣 PICK   Ⓐ ADD   ⬆ BUN", 130, 211)
+        gfx.drawText("🎣 PICK   ⬇ ADD   ⬆ BUN", 130, 211)
     end
     if assembly.lastResult ~= nil then
         gfx.drawText(assembly.lastResult, 130, 226)

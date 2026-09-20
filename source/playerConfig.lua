@@ -34,24 +34,26 @@ PlayerConfig = {
     orders = {
         capacity = 6,
         lifetime = 60,
-        minArrivalDelay = 20,
-        maxArrivalDelay = 40,
+        minArrivalDelay = 10,
+        maxArrivalDelay = 30,
+        emptyArrivalDelay = 5,
         initialCount = 1,
         ticketEntryDuration = 0.20,
+        ticketReturnDuration = 0.25,
         -- Tickets with this much time left flash so they read as urgent.
         urgentSeconds = 10,
         blinkHz = 2,
-        -- Rush hour: first one starts 3-4 minutes in, lasts 2 minutes, then
-        -- waits about 4 minutes before the next. Remaining waits are halved
-        -- and a new short order arrives every 1-2 seconds while a slot is free.
+        -- First rush after 90-120s; subsequent cooldowns last 105-135s.
+        -- Each rush lasts 60-90 seconds and issues an order every 2 seconds.
         rush = {
-            firstDelayMin = 180,
-            firstDelayMax = 240,
-            duration = 120,
-            cooldownMin = 210,
-            cooldownMax = 270,
+            firstDelayMin = 90,
+            firstDelayMax = 120,
+            durationMin = 60,
+            durationMax = 90,
+            cooldownMin = 105,
+            cooldownMax = 135,
             lifetimeScale = 0.5,
-            minArrivalDelay = 1,
+            minArrivalDelay = 2,
             maxArrivalDelay = 2,
         },
     },
@@ -191,7 +193,7 @@ PlayerConfig = {
             maxShake = 3,
             shakeHz = 11,
         },
-        pattyCost = 30, -- Two crank turns; an average 80-mince load makes 2.67 patties.
+        pattyCost = 50, -- An average 80-mince load makes 1.6 patties.
         rawDurationFrames = 15 * 15,
         cookedDurationFrames = 20 * 20,
         riseAnimationDurationFrames = 4, -- About 0.13 seconds at 30 FPS.

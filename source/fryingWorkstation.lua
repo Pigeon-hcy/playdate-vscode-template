@@ -10,6 +10,7 @@ local frying <const> = PlayerConfig.frying
 local juice <const> = Juice
 local systemFont <const> = gfx.getSystemFont()
 local smallFont <const> = gfx.font.new("/System/Fonts/Roobert-10-Bold") or systemFont
+local placeHint <const> = "Ⓐ PLACE PATTY · " .. frying.pattyCost .. " MINCE"
 local fire <const> = frying.fire
 local fireEffectId <const> = "frying.tray.fire"
 local fireStartShake <const> = { amplitude = fire.startShakeAmplitude, startHz = 13, endHz = 6 }
@@ -99,7 +100,7 @@ FryingWorkstation.help = {
     title = "FRYER",
     summary = "PATTIES COOK BY THEMSELVES, THEN BURN IF THEY ARE LEFT TOO LONG.",
     controls = {
-        { "Ⓐ", "GRILL A PATTY (COSTS " .. frying.pattyCost .. " MINCE)" },
+        { "Ⓐ", "PLACE A PATTY (" .. frying.pattyCost .. " MINCE)" },
         { "Ⓑ", "TAKE A COOKED PATTY" },
         { "ⒷⒷⒷ", "MASH TO PUT OUT EACH FIRE" },
     },
@@ -385,5 +386,8 @@ function FryingWorkstation.draw()
     end
     gfx.popContext()
 
+    smallFont:drawText(placeHint, 20, 196)
+    smallFont:drawText(FryingWorkstation.isOnFire() and "Ⓑ MASH TO PUT OUT FIRE" or
+        "Ⓑ TAKE COOKED PATTY", 20, 216)
     fireDialog:draw(fire.dialogCenterX + fireX, fire.dialogCenterY + fireY, juice.time)
 end

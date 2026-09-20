@@ -2,7 +2,15 @@
 -- Runtime assertions cover time, capacity, priority and the ticket trajectory.
 import "orderUI"
 local gfx <const> = playdate.graphics
-local config <const> = PlayerConfig.orders
+-- Fixed historical timing fixture keeps deadline/score arithmetic independent
+-- of gameplay tuning. timing.py checks the current production cadence.
+local config <const> = {
+    capacity=6, lifetime=60, minArrivalDelay=20, maxArrivalDelay=40,
+    initialCount=1, ticketEntryDuration=.2,
+    rush={firstDelayMin=180,firstDelayMax=240,duration=120,
+        cooldownMin=210,cooldownMax=270,lifetimeScale=.5,
+        minArrivalDelay=1,maxArrivalDelay=2},
+}
 -- The same queue rules without rush hour, so the fixed 30-second stub below
 -- only drives arrivals.
 local calmConfig <const> = {
@@ -153,6 +161,51 @@ Scoring.onChange = nil
 -- Real submission integration, including no-order protection and empty UI.
 import "assemblyWorkstation"
 local station = AssemblyWorkstation
+-- A successful assembly action promises one order, including across station
+-- changes and past its deadline. Failed stock consumption promises nothing.
+local originalOrders = Orders
+Orders = OrderManager.new({capacity=6,lifetime=60,initialCount=1,
+    minArrivalDelay=1000,maxArrivalDelay=1000}, function() return 1000 end)
+station.initialize()
+PlayerConfig.patties = 0
+assert(not station.addIngredient("P") and Orders.committedOrder == nil)
+Orders:update(45)
+local retractingY = OrderUI.getTicketY(Orders.pending[1])
+assert(retractingY < 2,"ticket must be retracting before work starts")
+assert(station.addIngredient("L"))
+local promised = Orders.committedOrder
+assert(promised == Orders.pending[1])
+assert(OrderUI.getTicketY(promised) == retractingY and Orders:getRemainingTime(promised) == 15,
+    "time locks immediately while the ticket starts returning from its current pose")
+Orders:update(PlayerConfig.orders.ticketReturnDuration / 2)
+assert(OrderUI.getTicketY(promised) > retractingY and OrderUI.getTicketY(promised) < 2)
+Orders:update(PlayerConfig.orders.ticketReturnDuration / 2)
+assert(OrderUI.getTicketY(promised) == 2)
+Orders:update(120)
+station.update(false)
+assert(Orders.committedOrder == promised and Orders.expired == 0)
+assert(Orders:getRemainingTime(promised) == 15,"work must not drain or refill frozen time")
+assert(OrderUI.getTicketY(promised) == 2 and not OrderUI.isUrgent(promised),
+    "a promised ticket stays fully visible without expiry blinking")
+local other = Orders:addOrder(Orders.time)
+other.expiresAt = Orders.time + 1
+Orders:update(1)
+assert(Orders.expired == 1 and Orders.committedOrder == promised)
+assert(station.pressUp() == "closed")
+Juice:update(.3)
+assert(station.pressUp() == "wrong")
+assert(Orders:count() == 0 and Orders.committedOrder == nil,
+    "even an incorrect submission resolves the promised order once")
+Juice:update(1);station.update(false)
+-- Work can begin with no customers; the next order is promised offscreen.
+station.initialize()
+assert(station.addIngredient("L") and Orders.committedOrder == nil)
+local arrival = Orders:addOrder(Orders.time)
+station.update(false)
+assert(Orders.committedOrder == arrival)
+Orders = originalOrders
+Orders.config = config
+Orders.randomDelay = function(a,b) return b end
 Orders:reset()
 station.initialize()
 PlayerConfig.assembly.currentRecipeIndex = 1
@@ -218,7 +271,7 @@ station.addIngredient("A")
 station.pressUp()
 Juice:update(.3)
 score = PlayerConfig.score
-local remaining = Orders.pending[1].expiresAt - Orders.time
+local remaining = Orders:getRemainingTime(Orders.pending[1])
 assert(station.pressUp() == "correct")
 assert(PlayerConfig.score == score + Scoring.burgerPoints({ "P", "A" }, remaining, true),
     "serving during a rush pays the rush bonus")
@@ -253,6 +306,6 @@ function playdate.update()
     end
     for index, order in ipairs(Orders.pending) do
         gfx.drawText("#" .. order.id .. "  slot " .. order.slot .. "  " ..
-            math.ceil(order.expiresAt - Orders.time) .. "s", 12, 105 + index * 16)
+            math.ceil(Orders:getRemainingTime(order)) .. "s", 12, 105 + index * 16)
     end
 end

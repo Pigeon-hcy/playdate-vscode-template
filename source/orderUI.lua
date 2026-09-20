@@ -19,7 +19,10 @@ local ticketWidth, ticketHeight = receipt:getSize()
 local holderX <const> = math.floor((PlayerConfig.screenWidth - holderWidth) / 2)
 local holderY <const> = 0
 local ticketRestY <const> = 2
-local uiHeight <const> = math.max(holderHeight, ticketRestY + ticketHeight)
+local markerGap <const> = 3
+local markerHeight <const> = 5
+local uiHeight <const> = math.max(holderHeight,
+    ticketRestY + ticketHeight + markerGap + markerHeight)
 local ticketSpacing <const> = 26
 local firstTicketX <const> = math.floor((PlayerConfig.screenWidth -
     (PlayerConfig.orders.capacity - 1) * ticketSpacing - ticketWidth) / 2)
@@ -33,24 +36,39 @@ end
 local exitY <const> = lipBottom - ticketHeight
 local exitTravel <const> = ticketRestY - exitY
 
-function OrderUI.getTicketY(order, queue)
-    queue = queue or Orders
-    local age = math.max(0, queue.time - order.createdAt)
+local function ticketYAt(order, time, slideProgress)
+    local age = math.max(0, time - order.createdAt)
     local entryDuration = PlayerConfig.orders.ticketEntryDuration
     if age < entryDuration then
         local progress = age / entryDuration
         return math.floor(ticketRestY - entryTravel * (1 - progress) ^ 3 + .5)
     end
-    local y = math.floor(ticketRestY - exitTravel * queue:getSlideProgress(order) + .5)
+    local y = math.floor(ticketRestY - exitTravel * slideProgress + .5)
     -- Keep one last row visible until the actual deadline; pixel rounding
     -- must not hide a still-submittable order a fraction of a second early.
-    if queue.time < order.expiresAt then y = math.max(exitY + 1, y) end
+    if time < order.expiresAt then y = math.max(exitY + 1, y) end
     return y
+end
+
+function OrderUI.getTicketY(order, queue)
+    queue = queue or Orders
+    if queue:isCommitted(order) then
+        -- Time locks immediately; only the ticket's position interpolates.
+        -- Reconstruct its pose at commitment, including an unfinished entry.
+        local initialSlide = math.max(0, math.min(1,
+            1 - order.lockedRemaining / (queue.config.lifetime / 2)))
+        local fromY = ticketYAt(order, order.committedAt, initialSlide)
+        local t = math.max(0, math.min(1,
+            (queue.time - order.committedAt) / PlayerConfig.orders.ticketReturnDuration))
+        return math.floor(fromY + (ticketRestY - fromY) * t + .5)
+    end
+    return ticketYAt(order, queue.time, queue:getSlideProgress(order))
 end
 
 function OrderUI.isUrgent(order, queue)
     queue = queue or Orders
-    return order.expiresAt - queue.time <= PlayerConfig.orders.urgentSeconds
+    if queue:isCommitted(order) then return false end
+    return queue:getRemainingTime(order) <= PlayerConfig.orders.urgentSeconds
 end
 
 function OrderUI.draw()
@@ -68,9 +86,18 @@ function OrderUI.draw()
     for _, order in ipairs(Orders.pending) do
         local urgent = blinkOn and OrderUI.isUrgent(order)
         if urgent then gfx.setImageDrawMode(gfx.kDrawModeInverted) end
-        receipt:draw(firstTicketX + (order.slot - 1) * ticketSpacing,
-            OrderUI.getTicketY(order))
+        local x = firstTicketX + (order.slot - 1) * ticketSpacing
+        local y = OrderUI.getTicketY(order)
+        receipt:draw(x, y)
         if urgent then gfx.setImageDrawMode(gfx.kDrawModeCopy) end
+        if Orders:isCommitted(order) then
+            local centerX = x + math.floor(ticketWidth / 2)
+            local markerY = y + ticketHeight + markerGap
+            gfx.setColor(gfx.kColorBlack)
+            gfx.fillTriangle(centerX, markerY,
+                centerX - 3, markerY + markerHeight - 1,
+                centerX + 3, markerY + markerHeight - 1)
+        end
     end
     -- The inverted holder is fixed to the screen top; tickets hang below
     -- its front lip and retract behind it as they age.

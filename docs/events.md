@@ -1,5 +1,21 @@
 # Workstation events
 
+## Starting the game
+
+The launcher and startup code display the hand-lettered LOADING... artwork
+before game resources are loaded. The launcher dissolves it in from left to
+right; after startup it dissolves out over 0.4 seconds before the road intro.
+The opening shutter reveals black, then the same loading art dissolves in,
+stays visible during preparation, and dissolves out before gameplay slides in.
+Both dissolves use pre-baked fixed pixel thresholds, with no random flicker.
+After the road/title intro, turn the crank in either direction to lift the
+shutter; one total revolution opens it fully. A no longer starts the game.
+Docking or stopping the crank pauses the shutter; the crank notice appears
+immediately when docked or after 0.65 seconds of inactivity. Loading the initial
+gameplay scene and its downward entrance begin only after the shutter is open.
+
+## Station events
+
 Sudden events interrupt a single workstation. They are owned by that
 workstation, so their state, input handling and drawing all live in its
 module and only appear while the player is standing at it. Other stations,
@@ -52,11 +68,13 @@ compile it with `pdc -k -I source <staging-directory> <output.pdx>`.
 
 ## Fryer: burn warning
 
-Each patty costs 30 mince; the grinder supplies 15 per full crank turn, so a
-patty requires two turns before cooking. A raw meat load yields 60–100 mince
+Each patty costs 50 mince; the grinder supplies 15 per full crank turn, so a
+patty requires 3⅓ turns before cooking. A raw meat load yields 60–100 mince
 (80 on average), enough for two or three patties with leftovers retained.
-Across loads this averages 2.67 patties per load. The fryer help card reads the current price from
-`PlayerConfig.frying.pattyCost`; its persistent counters and hints are hidden.
+Across loads this averages 1.6 patties per load. The fryer help card reads the current price from
+`PlayerConfig.frying.pattyCost`. Persistent hints below the tray show A to place
+a patty (50 mince) and B to take a cooked patty; during a fire, B changes to
+the extinguishing instruction.
 
 `source/fryingWarning.lua` is a shared, non-modal overlay. A cooked patty
 within `PlayerConfig.frying.warning.leadSeconds` (default 3 seconds) of
@@ -127,7 +145,7 @@ fits on screen, and the card's open, settle, close and fall-away timeline.
 ## Supply prompts and simplified workstation UI
 
 `source/supplyWarning.lua` opens only when a consumption attempt fails:
-A on the fryer with less mince than `pattyCost`, or A/DOWN while adding P
+A on the fryer with less mince than `pattyCost`, or DOWN while adding P
 at assembly with no cooked patties. Empty inventory, entering a station,
 adding another ingredient, and successfully spending the last unit do not
 open it. The burst stays for `PlayerConfig.supplyWarning.lifetime` (1.5 seconds)
@@ -144,8 +162,9 @@ with fire warnings. Supply burst images are also built once at load.
 `source/minceCounter.lua` pre-bakes gray digits at three integer sizes;
 only a changed integer quantity recalculates their layout. The number draws
 behind the grinder, followed by the machine and its operation hint. Fryer
-station labels, counters and bottom hints are removed; navigation, orders,
-help and emergency events remain. Assembly removes only its patty counter;
+station labels and counters are hidden; its bottom hints show placement,
+collection, and fire controls. Navigation, orders, help and emergency events
+remain. Assembly removes only its patty counter;
 the ten ingredient abbreviations remain visible. Recipe names use a cached
 92×32 image with word wrapping and bounded truncation for future names.
 
